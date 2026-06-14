@@ -138,20 +138,24 @@ Restart the SignalK server, then enable and configure the plugin under
 
 ## On the MFD: enable the autopilot first
 
-The MFD only shows its autopilot control view once it has discovered an AC. When
-the emulator's firehose is running, a Navico MFD auto-detects it and adds an
-**Autopilot** icon to the Settings menu. If the icon does not appear, run the
-MFD's **source selection / auto select** so it picks up the autopilot source —
-this is a prerequisite, the control view is unreachable until the autopilot is
-enabled on the MFD. (See your Navico MFD's install manual — e.g. the B&G
-Vulcan's *Software Setup → autopilot commissioning*.)
+The MFD only shows its autopilot control view once the autopilot is enabled on
+the MFD — this is a prerequisite. Per the Navico manual, *"a device connected to
+the NMEA 2000 network should automatically be identified by the system. If not,
+enable the feature from the advanced option in the System settings dialog."*
+
+> **Not yet verified with the emulator.** On this boat the Autopilot feature was
+> enabled **manually** from System settings when the project started. Whether a
+> running emulator now triggers fully automatic identification, or the feature
+> still has to be enabled by hand, is untested — if the control view does not
+> appear, enable it manually from System settings (advanced option).
 
 ## First commissioning
 
 A Navico MFD needs a control head on the bus to **start** its very first
 commissioning of an AC. The plugin can emulate one (a B&G keypad on a second
 address) so you can open the **"press standby"** gate without any physical Simrad
-hardware:
+hardware. (See your Navico MFD's install manual — e.g. the B&G Vulcan's
+*Software Setup → autopilot commissioning*.)
 
 1. Enable **Commissioning mode** in the plugin config and save. SignalK restarts
    the plugin automatically when you save config — no manual restart needed.
