@@ -42,9 +42,12 @@ as the server.
    autopilot state (read back over the loopback API).
 2. **Commissioning readback** — answers the MFD's `130845` dockside-config reads
    with byte-exact values from the reference AC42, so the wizard fields populate.
-   The control view unlocks **without finishing the wizard** (you can bail out
-   before the rudder test / sea-trial — those steps need a real drive but do not
-   gate the control view).
+   The control view unlocks **without finishing the wizard**: the values you key
+   in (rudder calibration, drive voltage, rudder test, …) are not consumed by
+   anything that steers — the backing pilot has its own commissioning — so they
+   can be left at defaults or skipped. The one setting that matters is **boat
+   type**: set it to **Sail** so the MFD exposes wind mode and the tack buttons
+   (per the Vulcan manual those functions require a Sail boat type).
 3. **Input bridge** — reassembles incoming `130850` commands, decodes the Simnet
    key byte, and (in `live` mode) calls the V2 Autopilot API.
 
@@ -72,14 +75,15 @@ the bridge decodes from the reassembled raw frame. The V2 `adjustTarget` floors
 is rounded to a whole degree `N` and sent as `(N+0.5)°` in radians, landing the
 floor exactly on `N`.
 
-**Tack** rides the same `0x1a` channel at the Vulcan's configured tack angle
-(UI default 100°; htool saw 90°), not a separate key. A single ChangeCourse well
-above the buttons' ±10 is treated as a tack — but **only in wind mode**, where a
-tack crosses the wind (a gybe crosses dead downwind); outside wind mode a big
-ChangeCourse is ignored. The magnitude is discarded: the pilot mirrors the
-apparent wind angle itself. The tack **direction is derived from SK's
-`environment.wind.angleApparent`** (positive to starboard → tack to starboard),
-not the unverified Vulcan dir byte, and mapped to `POST tack/port|tack/starboard`
+**Tack** rides the same `0x1a` channel at the MFD's configured tack angle
+(B&G Vulcan UI default 100°; htool saw 90°), not a separate key. A single
+ChangeCourse well above the buttons' ±10 is treated as a tack — but **only in
+wind mode**, where a tack crosses the wind (a gybe crosses dead downwind);
+outside wind mode a big ChangeCourse is ignored. The magnitude is discarded: the
+pilot mirrors the apparent wind angle itself. The tack **direction is derived
+from SK's `environment.wind.angleApparent`** (positive to starboard → tack to
+starboard), not the unverified MFD dir byte, and mapped to
+`POST tack/port|tack/starboard`
 (channel per [htool](https://github.com/htool/RaymarineAPtoFakeNavicoAutoPilot)).
 Test candidate — depends on the backing provider supporting tack, and the
 turn-direction convention still needs on-board verification.
@@ -132,6 +136,16 @@ Restart the SignalK server, then enable and configure the plugin under
 - Do **not** run this on a bus that already has a real Simrad/B&G AC — two devices
   broadcasting AP state will confuse control heads.
 
+## On the MFD: enable the autopilot first
+
+The MFD only shows its autopilot control view once it has discovered an AC. When
+the emulator's firehose is running, a Navico MFD auto-detects it and adds an
+**Autopilot** icon to the Settings menu. If the icon does not appear, run the
+MFD's **source selection / auto select** so it picks up the autopilot source —
+this is a prerequisite, the control view is unreachable until the autopilot is
+enabled on the MFD. (See your Navico MFD's install manual — e.g. the B&G
+Vulcan's *Software Setup → autopilot commissioning*.)
+
 ## First commissioning
 
 A Navico MFD needs a control head on the bus to **start** its very first
@@ -139,13 +153,15 @@ commissioning of an AC. The plugin can emulate one (a B&G keypad on a second
 address) so you can open the **"press standby"** gate without any physical Simrad
 hardware:
 
-1. Enable **Commissioning mode** in the plugin config and restart the plugin.
+1. Enable **Commissioning mode** in the plugin config and save. SignalK restarts
+   the plugin automatically when you save config — no manual restart needed.
 2. On the MFD, run the autopilot commissioning wizard. When it asks you to press
    standby, the emulated head is already putting the standby command on the bus,
    so the gate opens; the dockside config fields populate from the AC readback.
 3. Bail out of the wizard before the rudder test / sea-trial — the control view
-   unlocks anyway.
-4. **Disable Commissioning mode** and restart. It is not needed afterwards — the
+   unlocks anyway. Only **boat type** matters (set **Sail** for wind/tack); the
+   rudder calibration, drive voltage and rudder-test values are ignored.
+4. **Disable Commissioning mode** and save. It is not needed afterwards — the
    emulated AC plus the MFD's own buttons run normal operation.
 
 The emulated head only sends the keypad heartbeat (`65305`) and the standby
@@ -169,14 +185,17 @@ This is an alpha; these are open:
   (from htool) are now sent so the overlay should follow auto/wind/route, but htool
   had not fully verified this and some frames are guesses — needs on-board
   confirmation. If wrong, the pilot is still in the correct mode (confirm on its
-  own control head); only the Navico label may be off.
+  own control head); only the Navico MFD's mode label may be off.
 - **Tack is a test candidate.** Decoded as a ~90° ChangeCourse and mapped to the
   V2 tack endpoint, but never captured at the dock and dependent on the backing
   provider supporting tack.
 - **No Drift (`0x0c`) has no V2 equivalent** — the V2 states are only
   standby/auto/wind/route. Logged, never fired.
-- **±course / Wind / Track are only fully verified at the dock.** A pilot won't
-  hold auto without way on, so the full envelope needs a sea trial.
+- **±course / Wind / Track are only exercised at the dock.** The EV-200 does
+  engage and hold Auto at the dock (it moves the rudder), so the command path
+  itself is verified — but actual course-, wind- and route-holding *quality* can
+  only be judged with way on, so the full envelope still needs a sea trial. (Auto
+  hold-at-dock behaviour may differ on other pilots.)
 - **Output is via loopback HTTP** with a configured token. An in-process V2 call
   would remove the token requirement but there is no clean documented path for a
   non-provider plugin to set V2 state; this is a candidate for a later version.
