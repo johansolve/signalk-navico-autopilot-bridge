@@ -1,10 +1,10 @@
 # signalk-navico-autopilot-bridge
 
-> **Status: 0.1.0-alpha.** The core loop is proven on the water-adjacent dock
-> (a real B&G Vulcan 7 driving a Raymarine EV-200 through this bridge), but
-> several modes are not yet fully decoded or sea-trialled. See
-> [Known limitations](#known-limitations). Use at your own risk and only with the
-> boat secured.
+> **Status: 0.2.0-alpha.** The core loop is proven at the dock (a real B&G
+> Vulcan 7 driving a Raymarine EV-200 through this bridge), but several modes
+> are not yet fully decoded or sea-trialled. See
+> [Known limitations](#known-limitations) and the
+> [Disclaimer](#disclaimer--no-warranty) before using it.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
@@ -17,6 +17,33 @@ In other words: **press the autopilot buttons on a Navico plotter, steer a
 non-Navico pilot.** The bridge is Navico/Simrad-specific on the *input* side (only
 Navico MFDs bind to a Simrad AC) and **provider-agnostic on the output side**
 (anything that implements the SignalK V2 Autopilot API).
+
+## Disclaimer / no warranty
+
+**An autopilot steers the boat. This software can move the rudder.** Read this
+before you install it.
+
+- **Alpha, experimental, unofficial.** This is a reverse-engineered emulation of
+  a proprietary Simrad device, built from bus captures — not from any
+  manufacturer specification. It is not affiliated with, endorsed by, or
+  supported by Navico, B&G, Simrad, Lowrance, Raymarine, or the SignalK project.
+  Behaviour may change or break with any firmware, plugin, or canboatjs update.
+- **Not safety-rated.** It is **not** certified for marine navigation and must
+  **not** be relied on as a primary or sole means of steering or watchkeeping. A
+  competent helmsman must remain at the helm, keep a proper lookout, and be ready
+  to take manual control and drop the pilot to standby at all times.
+- **It can fail silently or behave unexpectedly** — wrong mode, wrong course,
+  no response, or a course change at the wrong moment. Several modes (Wind,
+  Track, Tack) are unverified test candidates. Do not trust it where a failure
+  could cause a collision, grounding, injury, or loss of life.
+- **You are responsible.** By installing or running this software you accept full
+  responsibility for any consequences. Only ever use it with the **boat secured,
+  the engine off, and the pilot's own control head to hand**, until you have
+  personally sea-trialled every mode you intend to rely on.
+- **No warranty.** Provided "AS IS", without warranty of any kind, express or
+  implied, including but not limited to fitness for a particular purpose. To the
+  maximum extent permitted by law the authors accept no liability for any damage,
+  injury, or loss arising from its use. See [License](#license).
 
 ## Why an emulator (the "firehose")
 
@@ -50,6 +77,140 @@ as the server.
    (per the Vulcan manual those functions require a Sail boat type).
 3. **Input bridge** — reassembles incoming `130850` commands, decodes the Simnet
    key byte, and (in `live` mode) calls the V2 Autopilot API.
+
+The byte-level command and mode-display decoding lives in
+[Protocol details](#protocol-details).
+
+## Setup
+
+Do the steps below in order:
+
+1. [Install](#1-install) the plugin from source.
+2. [Configure](#2-configure-the-plugin) it (start in `dry-run`).
+3. [Enable the autopilot on the MFD](#3-enable-the-autopilot-on-the-mfd).
+4. [Run first commissioning](#4-first-commissioning) to bind the MFD and unlock
+   the control view.
+5. [Set source priorities](#5-source-priorities-required) so the emulator can't
+   shadow the real pilot.
+
+### 1. Install
+
+This is an alpha and not (yet) in the SignalK app store. Install from source into
+the server's plugin directory:
+
+```sh
+cd ~/.signalk/node_modules
+git clone <repo> signalk-navico-autopilot-bridge
+# @canboat/canboatjs is a peerDependency and is already present in a SignalK
+# server install; no separate npm install is needed.
+```
+
+Restart the SignalK server, then enable and configure the plugin under
+**Server → Plugin Config**.
+
+### 2. Configure the plugin
+
+| option | default | notes |
+|---|---|---|
+| CAN interface | `can0` | SocketCAN interface |
+| Emulated AC model | `AC42` | both `AC42` and `AC12` bind a Vulcan 7; the model only sets the reported product info, not whether it binds |
+| Preferred N2K address | `35` | address the emulated AC claims |
+| Broadcast the firehose | `true` | required for binding — leave on |
+| Standard nav PGNs | `false` | duplicates other sources; A/B testing only |
+| **Bridge mode** | **`dry-run`** | `off` / `dry-run` (decode+log) / `live` (steer) |
+| Target autopilot id | `_default` | which `autopilots/<id>` the V2 API drives |
+| SignalK host / port | `127.0.0.1` / `3000` | loopback API target |
+| API token | — | Bearer token for `live` PUTs (Security → Access Requests) |
+| Commissioning mode | `false` | emulate a control head to open the first-commissioning gate (see below) |
+| Commissioning head address | `44` | address the emulated head claims (commissioning only) |
+
+#### ⚠️ Safety
+
+- **Default is `dry-run`** — it decodes and logs commands but never steers. You
+  must set `live` deliberately.
+- Only switch to `live` with the **boat secured, engine off, and the pilot's own
+  control head to hand** to drop to standby.
+- Do **not** run this on a bus that already has a real Simrad/B&G AC — two devices
+  broadcasting AP state will confuse control heads.
+
+### 3. Enable the autopilot on the MFD
+
+The MFD only shows its autopilot control view once the autopilot is enabled on
+the MFD — this is a prerequisite. Per the Navico manual, *"a device connected to
+the NMEA 2000 network should automatically be identified by the system. If not,
+enable the feature from the advanced option in the System settings dialog."*
+
+> **Not yet verified with the emulator.** On this boat the Autopilot feature was
+> enabled **manually** from System settings when the project started. Whether a
+> running emulator now triggers fully automatic identification, or the feature
+> still has to be enabled by hand, is untested — if the control view does not
+> appear, enable it manually from System settings (advanced option).
+
+### 4. First commissioning
+
+A Navico MFD needs a control head on the bus to **start** its very first
+commissioning of an AC. The plugin can emulate one (a B&G keypad on a second
+address) so you can open the **"press standby"** gate without any physical Simrad
+hardware. (See your Navico MFD's install manual — e.g. the B&G Vulcan's
+*Software Setup → autopilot commissioning*.)
+
+1. Enable **Commissioning mode** in the plugin config and save. SignalK restarts
+   the plugin automatically when you save config — no manual restart needed.
+2. On the MFD, run the autopilot commissioning wizard. When it asks you to press
+   standby, the emulated head is already putting the standby command on the bus,
+   so the gate opens; the dockside config fields populate from the AC readback.
+3. Bail out of the wizard before the rudder test / sea-trial — the control view
+   unlocks anyway. Only **boat type** matters (set **Sail** for wind/tack); the
+   rudder calibration, drive voltage and rudder-test values are ignored.
+4. **Disable Commissioning mode** and save. It is not needed afterwards — the
+   emulated AC plus the MFD's own buttons run normal operation.
+
+The emulated head only sends the keypad heartbeat (`65305`) and the standby
+command (`130850` key `0x0006`); it never steers.
+
+### 5. Source priorities (required)
+
+The emulator is a second "autopilot" on the same NMEA 2000 bus your SignalK server
+already reads. Its firehose includes Simnet `65305`/`65341`, which canboat maps to
+`steering.autopilot.state` and `steering.autopilot.target.headingMagnetic` — the
+same paths your **real** pilot writes. With two sources on one path, SignalK's
+source arbitration can pick the emulator's value (`65305` decodes to `heading`, not
+`auto`), and the V2 provider's `putAdjustHeading` then rejects a course change with
+**`400 "Autopilot not in auto or wind mode"`** because the path it reads is no
+longer `auto`/`wind`.
+
+Symptom: state changes (standby/auto/wind) work, but **a course change is refused
+in auto** (and intermittently in wind), even though the pilot really is in auto.
+
+Fix: pin the real pilot as the authoritative source for these paths in
+`~/.signalk/settings.json` (`sourcePriorities`), with an **empty timeout** so the
+emulator can never take over:
+
+```json
+"sourcePriorities": {
+  "steering.autopilot.state": [
+    { "sourceRef": "<real-pilot-source>", "timeout": "" }
+  ],
+  "steering.autopilot.target.headingMagnetic": [
+    { "sourceRef": "<real-pilot-source>", "timeout": "" }
+  ]
+}
+```
+
+Find `<real-pilot-source>` by reading the path and picking the source in `values`
+that reports the correct mode (not the emulator's `heading`):
+
+```sh
+curl -s http://localhost:3000/signalk/v1/api/vessels/self/steering/autopilot/state
+```
+
+A non-empty timeout (e.g. `10000`) is **not** enough: the real pilot may not
+re-publish state every few seconds at rest, so the emulator's ~2 Hz firehose wins
+again between updates. Use `""`. Restart the server after editing.
+
+## Protocol details
+
+Reference for the reverse-engineered N2K layer; not needed to set the plugin up.
 
 ### Command decoding
 
@@ -96,121 +257,6 @@ plugin sends distinct per-mode `65340`/`65302`/`65305` frames (auto `10,01`, win
 `10,03`, nav `10,06`) plus a mode-change announce. **Test candidates** — htool had
 not fully verified the wind/route overlay and some frames are his guesses.
 
-## Install
-
-This is an alpha and not (yet) in the SignalK app store. Install from source into
-the server's plugin directory:
-
-```sh
-cd ~/.signalk/node_modules
-git clone <repo> signalk-navico-autopilot-bridge
-# @canboat/canboatjs is a peerDependency and is already present in a SignalK
-# server install; no separate npm install is needed.
-```
-
-Restart the SignalK server, then enable and configure the plugin under
-**Server → Plugin Config**.
-
-## Configuration
-
-| option | default | notes |
-|---|---|---|
-| CAN interface | `can0` | SocketCAN interface |
-| Emulated AC model | `AC42` | both `AC42` and `AC12` bind a Vulcan 7; the model only sets the reported product info, not whether it binds |
-| Preferred N2K address | `35` | address the emulated AC claims |
-| Broadcast the firehose | `true` | required for binding — leave on |
-| Standard nav PGNs | `false` | duplicates other sources; A/B testing only |
-| **Bridge mode** | **`dry-run`** | `off` / `dry-run` (decode+log) / `live` (steer) |
-| Target autopilot id | `_default` | which `autopilots/<id>` the V2 API drives |
-| SignalK host / port | `127.0.0.1` / `3000` | loopback API target |
-| API token | — | Bearer token for `live` PUTs (Security → Access Requests) |
-| Commissioning mode | `false` | emulate a control head to open the first-commissioning gate (see below) |
-| Commissioning head address | `44` | address the emulated head claims (commissioning only) |
-
-### ⚠️ Safety
-
-- **Default is `dry-run`** — it decodes and logs commands but never steers. You
-  must set `live` deliberately.
-- Only switch to `live` with the **boat secured, engine off, and the pilot's own
-  control head to hand** to drop to standby.
-- Do **not** run this on a bus that already has a real Simrad/B&G AC — two devices
-  broadcasting AP state will confuse control heads.
-
-## Required: SignalK source priorities
-
-The emulator is a second "autopilot" on the same NMEA 2000 bus your SignalK server
-already reads. Its firehose includes Simnet `65305`/`65341`, which canboat maps to
-`steering.autopilot.state` and `steering.autopilot.target.headingMagnetic` — the
-same paths your **real** pilot writes. With two sources on one path, SignalK's
-source arbitration can pick the emulator's value (`65305` decodes to `heading`, not
-`auto`), and the V2 provider's `putAdjustHeading` then rejects a course change with
-**`400 "Autopilot not in auto or wind mode"`** because the path it reads is no
-longer `auto`/`wind`.
-
-Symptom: state changes (standby/auto/wind) work, but **a course change is refused
-in auto** (and intermittently in wind), even though the pilot really is in auto.
-
-Fix: pin the real pilot as the authoritative source for these paths in
-`~/.signalk/settings.json` (`sourcePriorities`), with an **empty timeout** so the
-emulator can never take over:
-
-```json
-"sourcePriorities": {
-  "steering.autopilot.state": [
-    { "sourceRef": "<real-pilot-source>", "timeout": "" }
-  ],
-  "steering.autopilot.target.headingMagnetic": [
-    { "sourceRef": "<real-pilot-source>", "timeout": "" }
-  ]
-}
-```
-
-Find `<real-pilot-source>` by reading the path and picking the source in `values`
-that reports the correct mode (not the emulator's `heading`):
-
-```sh
-curl -s http://localhost:3000/signalk/v1/api/vessels/self/steering/autopilot/state
-```
-
-A non-empty timeout (e.g. `10000`) is **not** enough: the real pilot may not
-re-publish state every few seconds at rest, so the emulator's ~2 Hz firehose wins
-again between updates. Use `""`. Restart the server after editing.
-
-## On the MFD: enable the autopilot first
-
-The MFD only shows its autopilot control view once the autopilot is enabled on
-the MFD — this is a prerequisite. Per the Navico manual, *"a device connected to
-the NMEA 2000 network should automatically be identified by the system. If not,
-enable the feature from the advanced option in the System settings dialog."*
-
-> **Not yet verified with the emulator.** On this boat the Autopilot feature was
-> enabled **manually** from System settings when the project started. Whether a
-> running emulator now triggers fully automatic identification, or the feature
-> still has to be enabled by hand, is untested — if the control view does not
-> appear, enable it manually from System settings (advanced option).
-
-## First commissioning
-
-A Navico MFD needs a control head on the bus to **start** its very first
-commissioning of an AC. The plugin can emulate one (a B&G keypad on a second
-address) so you can open the **"press standby"** gate without any physical Simrad
-hardware. (See your Navico MFD's install manual — e.g. the B&G Vulcan's
-*Software Setup → autopilot commissioning*.)
-
-1. Enable **Commissioning mode** in the plugin config and save. SignalK restarts
-   the plugin automatically when you save config — no manual restart needed.
-2. On the MFD, run the autopilot commissioning wizard. When it asks you to press
-   standby, the emulated head is already putting the standby command on the bus,
-   so the gate opens; the dockside config fields populate from the AC readback.
-3. Bail out of the wizard before the rudder test / sea-trial — the control view
-   unlocks anyway. Only **boat type** matters (set **Sail** for wind/tack); the
-   rudder calibration, drive voltage and rudder-test values are ignored.
-4. **Disable Commissioning mode** and save. It is not needed afterwards — the
-   emulated AC plus the MFD's own buttons run normal operation.
-
-The emulated head only sends the keypad heartbeat (`65305`) and the standby
-command (`130850` key `0x0006`); it never steers.
-
 ## Verified behaviour (dockside, Vulcan 7 → EV-200)
 
 - MFD binds to the emulator and raises a *lost-autopilot* alarm the instant the
@@ -254,4 +300,6 @@ the value here is the discovery/command protocol, not the commissioning data.
 
 ## License
 
-MIT.
+MIT. The software is provided "as is", without warranty of any kind and without
+liability on the part of the authors — see the
+[Disclaimer](#disclaimer--no-warranty).
