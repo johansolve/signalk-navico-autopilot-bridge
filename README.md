@@ -116,7 +116,7 @@ Restart the SignalK server, then enable and configure the plugin under
 | option | default | notes |
 |---|---|---|
 | CAN interface | `can0` | SocketCAN interface |
-| Emulated AC model | `AC42` | `AC12` is what a Vulcan 7 was verified to bind to |
+| Emulated AC model | `AC42` | both `AC42` and `AC12` bind a Vulcan 7; the model only sets the reported product info, not whether it binds |
 | Preferred N2K address | `35` | address the emulated AC claims |
 | Broadcast the firehose | `true` | required for binding — leave on |
 | Standard nav PGNs | `false` | duplicates other sources; A/B testing only |
@@ -135,6 +135,46 @@ Restart the SignalK server, then enable and configure the plugin under
   control head to hand** to drop to standby.
 - Do **not** run this on a bus that already has a real Simrad/B&G AC — two devices
   broadcasting AP state will confuse control heads.
+
+## Required: SignalK source priorities
+
+The emulator is a second "autopilot" on the same NMEA 2000 bus your SignalK server
+already reads. Its firehose includes Simnet `65305`/`65341`, which canboat maps to
+`steering.autopilot.state` and `steering.autopilot.target.headingMagnetic` — the
+same paths your **real** pilot writes. With two sources on one path, SignalK's
+source arbitration can pick the emulator's value (`65305` decodes to `heading`, not
+`auto`), and the V2 provider's `putAdjustHeading` then rejects a course change with
+**`400 "Autopilot not in auto or wind mode"`** because the path it reads is no
+longer `auto`/`wind`.
+
+Symptom: state changes (standby/auto/wind) work, but **a course change is refused
+in auto** (and intermittently in wind), even though the pilot really is in auto.
+
+Fix: pin the real pilot as the authoritative source for these paths in
+`~/.signalk/settings.json` (`sourcePriorities`), with an **empty timeout** so the
+emulator can never take over:
+
+```json
+"sourcePriorities": {
+  "steering.autopilot.state": [
+    { "sourceRef": "<real-pilot-source>", "timeout": "" }
+  ],
+  "steering.autopilot.target.headingMagnetic": [
+    { "sourceRef": "<real-pilot-source>", "timeout": "" }
+  ]
+}
+```
+
+Find `<real-pilot-source>` by reading the path and picking the source in `values`
+that reports the correct mode (not the emulator's `heading`):
+
+```sh
+curl -s http://localhost:3000/signalk/v1/api/vessels/self/steering/autopilot/state
+```
+
+A non-empty timeout (e.g. `10000`) is **not** enough: the real pilot may not
+re-publish state every few seconds at rest, so the emulator's ~2 Hz firehose wins
+again between updates. Use `""`. Restart the server after editing.
 
 ## On the MFD: enable the autopilot first
 
