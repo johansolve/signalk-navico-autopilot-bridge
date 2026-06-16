@@ -1,8 +1,10 @@
 # signalk-navico-autopilot-bridge
 
-> **Status: 0.3.0-alpha.** The core loop is proven at the dock (a real B&G
-> Vulcan 7 driving a Raymarine EV-200 through this bridge), but several modes
-> are not yet fully decoded or sea-trialled. See
+> **Status: 0.3.0-alpha.** Sea-trialled on a real rig (B&G Vulcan 7 → SignalK V2
+> → Raymarine EV-200): engaging and holding Auto, ±course nudges, the abort /
+> failsafe path and following a route leg all worked on the water. **Wind-mode
+> display and Tack do not work yet**, and some MFD display frames are still
+> unverified. One trial only, in light conditions. See
 > [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
@@ -10,12 +12,13 @@ Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
 control view**. The button presses that view puts on the NMEA 2000 bus (Simnet
 `130850`) are decoded and translated into the **SignalK Autopilot V2 API**, which
-drives whichever pilot backs it — for example a Raymarine EV-200 via
-[`signalk-raymarine-autopilot`](https://github.com/SignalK/signalk-raymarine-autopilot).
+drives whichever pilot backs it through an Autopilot V2 provider — for example a
+Raymarine EV-200 via
+[`signalk-autopilot`](https://github.com/SignalK/signalk-autopilot).
 
 In other words: **press the autopilot buttons on a Navico plotter, steer a
-non-Navico pilot.** The bridge is Navico/Simrad-specific on the *input* side (only
-Navico MFDs bind to a Simrad AC) and **provider-agnostic on the output side**
+non-Navico pilot.** The bridge is Navico/Simrad/B&G-specific on the *input* side
+(only Navico MFDs bind to a Simrad AC) and **provider-agnostic on the output side**
 (anything that implements the SignalK V2 Autopilot API).
 
 ## Disclaimer / no warranty
@@ -33,9 +36,10 @@ before you install it.
   competent helmsman must remain at the helm, keep a proper lookout, and be ready
   to take manual control and drop the pilot to standby at all times.
 - **It can fail silently or behave unexpectedly** — wrong mode, wrong course,
-  no response, or a course change at the wrong moment. Several modes (Wind,
-  Track, Tack) are unverified test candidates. Do not trust it where a failure
-  could cause a collision, grounding, injury, or loss of life.
+  no response, or a course change at the wrong moment. Several features (Wind
+  display/adjust, Tack, route/track display) are unverified test candidates. Do
+  not trust it where a failure could cause a collision, grounding, injury, or
+  loss of life.
 - **You are responsible.** By installing or running this software you accept full
   responsibility for any consequences. Only ever use it with the **boat secured,
   the engine off, and the pilot's own control head to hand**, until you have
@@ -95,14 +99,19 @@ Do the steps below in order:
 
 ### 1. Install
 
-This is an alpha and not (yet) in the SignalK app store. Install from source into
-the server's plugin directory:
+Install it from the **SignalK app store**: in the SignalK admin UI open
+**Appstore → Available**, search for *Navico autopilot bridge*, install it, and
+restart the server. It is published as an **alpha** — read the
+[Disclaimer](#disclaimer--no-warranty) first.
+
+`@canboat/canboatjs` is a peerDependency already present in a SignalK server
+install, so there is nothing else to install.
+
+To install from source instead (e.g. for development):
 
 ```sh
 cd ~/.signalk/node_modules
-git clone <repo> signalk-navico-autopilot-bridge
-# @canboat/canboatjs is a peerDependency and is already present in a SignalK
-# server install; no separate npm install is needed.
+git clone https://github.com/johansolve/signalk-navico-autopilot-bridge.git
 ```
 
 Restart the SignalK server, then enable and configure the plugin under
@@ -115,12 +124,12 @@ Restart the SignalK server, then enable and configure the plugin under
 | CAN interface | `can0` | SocketCAN interface |
 | Emulated AC model | `AC42` | both `AC42` and `AC12` bind a Vulcan 7; the model only sets the reported product info, not whether it binds |
 | Preferred N2K address | `35` | address the emulated AC claims |
-| Broadcast the firehose | `true` | required for binding — leave on |
+| Broadcast AC autopilot state | `true` | the firehose; required for binding — leave on |
 | Standard nav PGNs | `false` | duplicates other sources; A/B testing only |
 | **Bridge mode** | **`dry-run`** | `off` / `dry-run` (decode+log) / `live` (steer) |
 | Target autopilot id | `_default` | which `autopilots/<id>` the V2 API drives |
 | SignalK host / port | `127.0.0.1` / `3000` | loopback API target |
-| API token | — | Bearer token for `live` PUTs (Security → Access Requests) |
+| API token | — | leave empty — auto-requested, you approve it once (see [Access & token](#access--token)) |
 | Commissioning mode | `false` | emulate a control head to open the first-commissioning gate (see below) |
 | Commissioning head address | `44` | address the emulated head claims (commissioning only) |
 
@@ -128,10 +137,33 @@ Restart the SignalK server, then enable and configure the plugin under
 
 - **Default is `dry-run`** — it decodes and logs commands but never steers. You
   must set `live` deliberately.
-- Only switch to `live` with the **boat secured, engine off, and the pilot's own
-  control head to hand** to drop to standby.
+- Only switch to `live` with a **competent helmsman at the helm and the pilot's
+  own control head to hand** to drop to standby. Do **first commissioning and any
+  untested mode** at the dock with the boat secured.
 - Do **not** run this on a bus that already has a real Simrad/B&G AC — two devices
   broadcasting AP state will confuse control heads.
+
+#### Access & token
+
+In `live` mode the bridge has to PUT commands to the Autopilot V2 API, which needs
+a read/write token. You normally **leave the API token field empty** and let the
+plugin obtain one through SignalK's standard device access-request flow:
+
+1. On first start in `live`, the plugin submits an access request (it asks for
+   `readwrite`) and prints `requesting device access` in its log.
+2. In the SignalK admin UI, open **Security → Access Requests**. A pending entry
+   appears, described as *"Navico autopilot bridge (needs readwrite to steer)"*.
+   **Approve** it with **read/write** permission.
+3. The granted token is stored in the plugin's data directory (`access.json`) and
+   reused across restarts, so you only approve once. The bridge now shows up under
+   **Security → Devices** and can be revoked there at any time.
+
+If you **deny** the request the bridge stays read-only until you reconfigure and
+restart it. If the request expires, or you later revoke the device, the plugin
+automatically submits a fresh request to approve again.
+
+To use a specific token instead, paste it into the **API token** field — it must
+be a valid SignalK JWT; any non-JWT value is ignored and the auto-request is used.
 
 ### 3. Enable the autopilot on the MFD
 
@@ -271,7 +303,7 @@ Magnetic; the MFD converts to its configured heading reference (e.g. True) using
 the bus magnetic variation, so set the MFD's heading units to match the rest of
 the boat.
 
-## Verified behaviour (dockside, Vulcan 7 → EV-200)
+## Verified behaviour (Vulcan 7 → EV-200)
 
 - MFD binds to the emulator and raises a *lost-autopilot* alarm the instant the
   firehose stops.
@@ -279,10 +311,21 @@ the boat.
 - Control view reachable and live **without finishing the wizard**.
 - Standby / Auto / Wind / Nav(Track) / ±course button presses decode and, in
   `live`, drive the EV-200 (clutch engages, rudder moves, P70 and the Vulcan
-  overlay reflect the mode).
+  overlay reflect the mode). The overlay label followed the pilot in every mode
+  during the trial.
 - **Set heading** displays on the MFD (both the overlay and the AP view) via the
   populated `127237`; ±course on the Vulcan changes it and is confirmed on the
   MFD without touching the pilot's own head.
+
+### Sea trial (on the water, light wind, calm sea, single trial)
+
+- **Auto holds course** with way on; the abort path is sound: **P70 standby frees
+  the helm immediately**, and standby from the Vulcan drops the pilot.
+- **±1° / ±10°** nudges alter heading by the right amount and direction; a
+  cumulative ~60° alteration came round without an accidental tack.
+- **Nav** steered along a route leg toward the waypoint and corrected cross-track.
+- **Wind** engaged and **held the apparent wind angle** — but see the display /
+  Tack limitation below.
 
 ## Known limitations
 
@@ -297,23 +340,26 @@ This is an alpha; these are open:
   works — only opening the view from scratch in Nav crashes it. A correct fix needs
   a capture of a real Simrad AC in route mode. Until then, avoid opening the AP view
   while in Nav.
-- **Wind-mode values are not emitted, which disables Tack.** In Wind the MFD shows
-  no commanded wind angle and no true wind direction (TWD), and **greys out the
-  Tack button**, because the emulator's `65341` always carries heading, not a wind
+- **Wind-mode display and Tack do not work, although the pilot does hold wind.**
+  On the sea trial the EV-200 **engaged Wind and held the apparent wind angle**,
+  but the MFD shows no commanded wind angle and no true wind angle (TWA),
+  ±wind-angle adjust from the Vulcan has no effect, and the **Tack button is
+  greyed out** — because the emulator's `65341` always carries heading, not a wind
   reference. Tack is decoded (~90° ChangeCourse → V2 tack endpoint) but cannot be
   triggered from the MFD until the wind angle is reported. Needs a capture of a real
   Simrad AC in wind mode to get the right frame/field.
-- **Mode label in Wind/Track is otherwise a test candidate.** Per-mode firehose
-  frames (from htool) are sent so the overlay should follow auto/wind/route, but
-  some frames are guesses. If wrong, the pilot is still in the correct mode (confirm
-  on its own control head); only the Navico MFD's mode label may be off.
+- **Some mode-display frames are still guesses.** The per-mode firehose frames
+  (from htool) made the Vulcan overlay follow standby/auto/wind/route correctly
+  throughout the sea trial, but some are unverified. If one is wrong the pilot is
+  still in the correct mode (confirm on its own control head); only the Navico
+  MFD's mode label would be off.
 - **No Drift (`0x0c`) has no V2 equivalent** — the V2 states are only
   standby/auto/wind/route. Logged, never fired.
-- **±course / Wind / Track are only exercised at the dock.** The EV-200 does
-  engage and hold Auto at the dock (it moves the rudder), so the command path
-  itself is verified — but actual course-, wind- and route-holding *quality* can
-  only be judged with way on, so the full envelope still needs a sea trial. (Auto
-  hold-at-dock behaviour may differ on other pilots.)
+- **Only one sea trial, in light conditions.** Auto course-hold, ±course, the
+  abort path and route-leg tracking are proven on the water — but in light wind
+  (~10 kn), calm sea, at ~4 kn with a single crew. Holding quality in stronger
+  wind and sea, and waypoint advance along a multi-leg route, are not yet proven.
+  (Auto behaviour may also differ on other pilots.)
 - **Output is via loopback HTTP** with a configured token. An in-process V2 call
   would remove the token requirement but there is no clean documented path for a
   non-provider plugin to set V2 state; this is a candidate for a later version.

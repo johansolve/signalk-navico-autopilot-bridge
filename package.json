@@ -1,7 +1,7 @@
 {
   "name": "signalk-navico-autopilot-bridge",
   "version": "0.3.0-alpha",
-  "description": "Emulate a Simrad AC12/AC42 autopilot computer so a Navico MFD (B&G Vulcan/Zeus, Simrad, Lowrance) drives the SignalK Autopilot V2 API from its own autopilot control view — and thus any pilot the API backs (e.g. a Raymarine EV-200).",
+  "description": "Emulate a Simrad AC12/AC42 autopilot computer so a Navico MFD (B&G Vulcan/Zeus, Simrad, Lowrance) drives the SignalK Autopilot V2 API from its own autopilot control view — and thus any pilot the API backs (e.g. a Raymarine EV-200). Alpha and not feature-complete — see README for verified behaviour and known limitations.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"no tests yet\" && exit 0"
@@ -11,9 +11,17 @@
     "signalk-category-hardware",
     "nmea2000",
     "autopilot",
+    "navico",
     "simrad",
+    "bng",
     "ac42",
     "ac12"
+  ],
+  "files": [
+    "index.js",
+    "lib/",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
@@ -21,6 +29,14 @@
   "peerDependencies": {
     "@canboat/canboatjs": ">=2.10.0"
   },
-  "author": "Johan",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/johansolve/signalk-navico-autopilot-bridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johansolve/signalk-navico-autopilot-bridge/issues"
+  },
+  "homepage": "https://github.com/johansolve/signalk-navico-autopilot-bridge#readme",
+  "author": "Johan Sölve (https://github.com/johansolve)",
   "license": "MIT"
 }

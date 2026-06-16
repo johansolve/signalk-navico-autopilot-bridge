@@ -35,7 +35,7 @@ module.exports = function (app) {
       'Vulcan/Zeus, Simrad, Lowrance) binds to it and sends its autopilot ' +
       'control-view button presses as Simnet 130850 commands. Those are decoded ' +
       'and translated into the SignalK Autopilot V2 API, driving whichever pilot ' +
-      'backs it (e.g. a Raymarine EV-200 via signalk-raymarine-autopilot). ' +
+      'backs it (e.g. a Raymarine EV-200 via signalk-autopilot). ' +
       'ALPHA: see README for verified behaviour and known limitations.'
   }
 
@@ -52,8 +52,9 @@ module.exports = function (app) {
       acModel: {
         type: 'string',
         title: 'Emulated AC model',
-        description: 'Identity broadcast to the MFD. AC12 is what a Libelle ' +
-          'Vulcan 7 was verified to bind to; AC42 matches the reference capture.',
+        description: 'Identity broadcast to the MFD. Both AC42 and AC12 bind a ' +
+          'Vulcan 7; the model only sets the reported product info, not whether ' +
+          'it binds. AC42 matches the reference capture.',
         enum: ['AC42', 'AC12'],
         default: 'AC42'
       },
@@ -65,7 +66,7 @@ module.exports = function (app) {
       },
       enableFirehose: {
         type: 'boolean',
-        title: 'Broadcast the AC firehose',
+        title: 'Broadcast AC autopilot state (required)',
         description: 'Send the full Simrad AP state/telemetry broadcast a real ' +
           'AC emits. Required for the MFD to bind and for the control view to ' +
           'unlock. Leave on.',
