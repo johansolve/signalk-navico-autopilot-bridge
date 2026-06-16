@@ -1,6 +1,6 @@
 # signalk-navico-autopilot-bridge
 
-> **Status: 0.2.0-alpha.** The core loop is proven at the dock (a real B&G
+> **Status: 0.3.0-alpha.** The core loop is proven at the dock (a real B&G
 > Vulcan 7 driving a Raymarine EV-200 through this bridge), but several modes
 > are not yet fully decoded or sea-trialled. See
 > [Known limitations](#known-limitations) and the
@@ -257,6 +257,20 @@ plugin sends distinct per-mode `65340`/`65302`/`65305` frames (auto `10,01`, win
 `10,03`, nav `10,06`) plus a mode-change announce. **Test candidates** — htool had
 not fully verified the wind/route overlay and some frames are his guesses.
 
+### Set heading (127237)
+
+When engaged the emulator broadcasts `127237` Heading/Track Control with the
+locked heading in the *Heading-To-Steer* field (Steering Mode = Heading Control,
+Heading Reference = Magnetic), so the MFD shows the set heading. A real AC
+re-broadcasts this; without it the MFD shows "- - -". It is sent at **5 Hz**
+because the boat's other devices broadcast `127237` with an *empty*
+Heading-To-Steer at 10–20 Hz, which otherwise blanks the value and makes the
+display flicker. The value is `steering.autopilot.target.headingMagnetic` (the
+locked heading), falling back to `navigation.headingMagnetic`. It is sent as
+Magnetic; the MFD converts to its configured heading reference (e.g. True) using
+the bus magnetic variation, so set the MFD's heading units to match the rest of
+the boat.
+
 ## Verified behaviour (dockside, Vulcan 7 → EV-200)
 
 - MFD binds to the emulator and raises a *lost-autopilot* alarm the instant the
@@ -266,19 +280,33 @@ not fully verified the wind/route overlay and some frames are his guesses.
 - Standby / Auto / Wind / Nav(Track) / ±course button presses decode and, in
   `live`, drive the EV-200 (clutch engages, rudder moves, P70 and the Vulcan
   overlay reflect the mode).
+- **Set heading** displays on the MFD (both the overlay and the AP view) via the
+  populated `127237`; ±course on the Vulcan changes it and is confirmed on the
+  MFD without touching the pilot's own head.
 
 ## Known limitations
 
 This is an alpha; these are open:
 
-- **Mode display in Wind/Track is a test candidate.** Per-mode firehose frames
-  (from htool) are now sent so the overlay should follow auto/wind/route, but htool
-  had not fully verified this and some frames are guesses — needs on-board
-  confirmation. If wrong, the pilot is still in the correct mode (confirm on its
-  own control head); only the Navico MFD's mode label may be off.
-- **Tack is a test candidate.** Decoded as a ~90° ChangeCourse and mapped to the
-  V2 tack endpoint, but never captured at the dock and dependent on the backing
-  provider supporting tack.
+- **Route/Track display crashes the MFD's AP view.** Opening the dedicated
+  autopilot view from scratch while in Nav crashes a Vulcan 7 (it recovers and
+  rebinds). The cause is confirmed to be the unverified route display frames
+  (`65302`/`65305`, htool guesses): substituting the proven auto frames stops the
+  crash, but showing "Auto" while tracking is poor UX so the route frames are kept.
+  Steering in Nav works, and *switching* to Nav while the AP view is already open
+  works — only opening the view from scratch in Nav crashes it. A correct fix needs
+  a capture of a real Simrad AC in route mode. Until then, avoid opening the AP view
+  while in Nav.
+- **Wind-mode values are not emitted, which disables Tack.** In Wind the MFD shows
+  no commanded wind angle and no true wind direction (TWD), and **greys out the
+  Tack button**, because the emulator's `65341` always carries heading, not a wind
+  reference. Tack is decoded (~90° ChangeCourse → V2 tack endpoint) but cannot be
+  triggered from the MFD until the wind angle is reported. Needs a capture of a real
+  Simrad AC in wind mode to get the right frame/field.
+- **Mode label in Wind/Track is otherwise a test candidate.** Per-mode firehose
+  frames (from htool) are sent so the overlay should follow auto/wind/route, but
+  some frames are guesses. If wrong, the pilot is still in the correct mode (confirm
+  on its own control head); only the Navico MFD's mode label may be off.
 - **No Drift (`0x0c`) has no V2 equivalent** — the V2 states are only
   standby/auto/wind/route. Logged, never fired.
 - **±course / Wind / Track are only exercised at the dock.** The EV-200 does
