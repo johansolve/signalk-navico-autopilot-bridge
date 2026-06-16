@@ -1,7 +1,7 @@
 {
   "name": "signalk-navico-autopilot-bridge",
-  "version": "0.3.0-alpha",
-  "description": "Emulate a Simrad AC12/AC42 autopilot computer so a Navico MFD (B&G Vulcan/Zeus, Simrad, Lowrance) drives the SignalK Autopilot V2 API from its own autopilot control view — and thus any pilot the API backs (e.g. a Raymarine EV-200). Alpha and not feature-complete — see README for verified behaviour and known limitations.",
+  "version": "0.3.1-alpha",
+  "description": "Emulate a Simrad AC12/AC42 so a Navico MFD (B&G/Simrad/Lowrance) drives any SignalK Autopilot V2 pilot (e.g. a Raymarine EV-200) from its own autopilot control view. Alpha — see README for verified behaviour and known limitations.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"no tests yet\" && exit 0"
