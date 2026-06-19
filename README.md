@@ -214,9 +214,49 @@ longer `auto`/`wind`.
 Symptom: state changes (standby/auto/wind) work, but **a course change is refused
 in auto** (and intermittently in wind), even though the pilot really is in auto.
 
-Fix: pin the real pilot as the authoritative source for these paths in
-`~/.signalk/settings.json` (`sourcePriorities`), with an **empty timeout** so the
-emulator can never take over:
+Fix: pin the real pilot as the authoritative source for these paths, with an
+**empty timeout** so the emulator can never take over. **How you do this depends on
+your server version** — SignalK **2.28** reworked the source-priority mechanism
+(config moved to its own file, sources are now keyed by a stable CAN Name, and a
+Data Browser UI was added). Check yours under **Server → … → Version**.
+
+First, find `<real-pilot-source>` — the source that reports the **correct mode**
+(`auto`/`wind`/`standby`), not the emulator's `heading`. Read the path and look at
+the entries under `values`:
+
+```sh
+curl -s http://localhost:3000/signalk/v1/api/vessels/self/steering/autopilot/state
+```
+
+On 2.28 the source refs are CAN Names (e.g. the real pilot reports `state` via pgn
+`126720` under a ref like `can00.c0509635e76d9500`; the emulator is a separate ref
+that publishes pgn `65305`). These are **stable across bus changes** — unlike the
+old address-based `can0.<n>` refs.
+
+**SignalK ≥ 2.28 (recommended: Data Browser UI)**
+
+1. Open **Data Browser**, find `steering.autopilot.state`, and use the source-
+   priority control to rank the **real pilot first** with **no timeout**, the
+   emulator below it (or disable the emulator as a source for this path).
+2. Repeat for `steering.autopilot.target.headingMagnetic`.
+
+The UI writes `~/.signalk/priorities.json` under `priorityOverrides` — equivalent
+to editing it directly:
+
+```json
+"priorityOverrides": {
+  "steering.autopilot.state": [
+    { "sourceRef": "<real-pilot-source>", "timeout": "" }
+  ],
+  "steering.autopilot.target.headingMagnetic": [
+    { "sourceRef": "<real-pilot-source>", "timeout": "" }
+  ]
+}
+```
+
+**SignalK < 2.28 (settings.json)**
+
+Pin the source in `~/.signalk/settings.json` under `sourcePriorities`:
 
 ```json
 "sourcePriorities": {
@@ -229,16 +269,9 @@ emulator can never take over:
 }
 ```
 
-Find `<real-pilot-source>` by reading the path and picking the source in `values`
-that reports the correct mode (not the emulator's `heading`):
-
-```sh
-curl -s http://localhost:3000/signalk/v1/api/vessels/self/steering/autopilot/state
-```
-
-A non-empty timeout (e.g. `10000`) is **not** enough: the real pilot may not
-re-publish state every few seconds at rest, so the emulator's ~2 Hz firehose wins
-again between updates. Use `""`. Restart the server after editing.
+Either way, a non-empty timeout (e.g. `10000`) is **not** enough: the real pilot
+may not re-publish state every few seconds at rest, so the emulator's ~2 Hz
+firehose wins again between updates. Use `""`. Restart the server after editing.
 
 ## Protocol details
 
