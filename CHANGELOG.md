@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4-alpha] - 2026-06-23
+
+### Added
+- Reusable SignalK plugin-ci GitHub Actions workflow, so the App Store Indicators tab
+  shows a per-platform pass/fail matrix and PRs get structure/lifecycle/schema validation.
+
 ## [0.3.3-alpha] - 2026-06-22
 
 ### Fixed
