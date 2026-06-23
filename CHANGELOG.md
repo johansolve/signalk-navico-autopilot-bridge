@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.5-alpha] - 2026-06-23
+
+### Fixed
+- Declare `@canboat/canboatjs` as an **optional** peer dependency
+  (`peerDependenciesMeta`). It is provided by the host Signal K server (already
+  compiled), so npm no longer auto-installs it standalone. This clears the
+  plugin-ci native-addon failure (the appstore installs with `--ignore-scripts`
+  and cannot compile native addons) without changing on-board behaviour.
+
 ## [0.3.4-alpha] - 2026-06-23
 
 ### Added
