@@ -2,8 +2,10 @@
 
 > **Status: 0.3.0-alpha.** Sea-trialled on a real rig (B&G Vulcan 7 → SignalK V2
 > → Raymarine EV-200): engaging and holding Auto, ±course nudges, the abort /
-> failsafe path and following a route leg all worked on the water. **Wind-mode
-> display and Tack do not work yet**, and some MFD display frames are still
+> failsafe path and following a route leg all worked on the water. The commanded
+> **wind angle is now reported** (`65341` field `0x03`, pinned from a real NAC-3
+> wind capture), but whether it un-greys **Tack** on the MFD is not yet
+> sea-trialled, and some MFD display frames are still
 > unverified. One trial only, in light conditions. See
 > [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
@@ -319,8 +321,12 @@ turn-direction convention still needs on-board verification.
 The MFD's displayed mode is driven by the firehose, not by the button press. Per
 htool, `65305` `00,1d,..` sets the displayed mode and `00,0a,..` the state; the
 plugin sends distinct per-mode `65340`/`65302`/`65305` frames (auto `10,01`, wind
-`10,03`, nav `10,06`) plus a mode-change announce. **Test candidates** — htool had
-not fully verified the wind/route overlay and some frames are his guesses.
+`10,03`, nav `10,06`) plus a mode-change announce. The overlay followed
+standby/auto/wind/route correctly on the sea trial. A NAC-3 wind capture has since
+confirmed the `65305` selector-`0x0a` mode word — standby `0x0008`, auto `0x0010`,
+**wind `0x0400`** (the plugin's earlier `0x0406` was an htool guess and has been
+corrected to `0x0400`). The `65340` wind code is still the unverified `10,03`; the
+route display frames remain **test candidates** (htool guesses).
 
 ### Set heading (127237)
 
@@ -349,6 +355,9 @@ the boat.
 - **Set heading** displays on the MFD (both the overlay and the AP view) via the
   populated `127237`; ±course on the Vulcan changes it and is confirmed on the
   MFD without touching the pilot's own head.
+- **Track restart** from the Vulcan's autopilot control works fine. The MFD
+  handles it internally (it does not require the bridge to act on a distinct
+  command), so nothing extra is decoded on this side.
 
 ### Sea trial (on the water, light wind, calm sea, single trial)
 
@@ -357,8 +366,8 @@ the boat.
 - **±1° / ±10°** nudges alter heading by the right amount and direction; a
   cumulative ~60° alteration came round without an accidental tack.
 - **Nav** steered along a route leg toward the waypoint and corrected cross-track.
-- **Wind** engaged and **held the apparent wind angle** — but see the display /
-  Tack limitation below.
+- **Wind** engaged and **held the apparent wind angle**, overlay showed *Wind* —
+  but see the Tack limitation below.
 
 ## Known limitations
 
@@ -373,21 +382,32 @@ This is an alpha; these are open:
   works — only opening the view from scratch in Nav crashes it. A correct fix needs
   a capture of a real Simrad AC in route mode. Until then, avoid opening the AP view
   while in Nav.
-- **Wind-mode display and Tack do not work, although the pilot does hold wind.**
-  On the sea trial the EV-200 **engaged Wind and held the apparent wind angle**,
-  but the MFD shows no commanded wind angle and no true wind angle (TWA),
-  ±wind-angle adjust from the Vulcan has no effect, and the **Tack button is
-  greyed out** — because the emulator's `65341` always carries heading, not a wind
-  reference. Tack is decoded (~90° ChangeCourse → V2 tack endpoint) but cannot be
-  triggered from the MFD until the wind angle is reported. Needs a capture of a real
-  Simrad AC in wind mode to get the right frame/field.
+- **Wind-mode Tack is not proven yet, although the pilot does hold wind.** On the
+  sea trial the EV-200 **engaged Wind and held the apparent wind angle** and the MFD
+  overlay showed *Wind*, but the **Tack button was greyed out** and ±wind-angle
+  adjust from the Vulcan had no effect — because the emulator's `65341` then carried
+  only heading, never a wind reference. A real NAC-3 wind capture has since pinned
+  the commanded wind angle to **`65341` field `0x03`** (radians × 10000, LE16
+  unsigned — the same encoding and 0–360° convention as `130306`, proven by the
+  field tracking the live apparent wind to the bit at engage). The emulator now sends
+  that frame in wind mode (and suppresses the field-`0x02` heading, as the real AP
+  does), `rad16`'s unsigned wrap mapping SK's signed apparent wind angle (port
+  negative) onto the AP's 0–360°. **Whether this un-greys Tack and shows the wind
+  angle on the MFD is not yet sea-trialled.** Tack itself is decoded (~90°
+  ChangeCourse → V2 tack endpoint). One gap remains: there is no SK path for the
+  *locked* wind datum (the EV-200's `65345` Pilot Wind Datum is undecoded), so until
+  that is added the reported angle follows the live apparent wind, not the held
+  setpoint.
 - **Some mode-display frames are still guesses.** The per-mode firehose frames
   (from htool) made the Vulcan overlay follow standby/auto/wind/route correctly
   throughout the sea trial, but some are unverified. If one is wrong the pilot is
   still in the correct mode (confirm on its own control head); only the Navico
   MFD's mode label would be off.
 - **No Drift (`0x0c`) has no V2 equivalent** — the V2 states are only
-  standby/auto/wind/route. Logged, never fired.
+  standby/auto/wind/route. Logged, never fired. In practice this is a non-issue
+  for a Raymarine backing pilot: the EV-200 applies the equivalent
+  drift/cross-track compensation by default in its course-hold modes, so the No
+  Drift behaviour is effectively always on regardless of the button.
 - **Only one sea trial, in light conditions.** Auto course-hold, ±course, the
   abort path and route-leg tracking are proven on the water — but in light wind
   (~10 kn), calm sea, at ~4 kn with a single crew. Holding quality in stronger

@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0-alpha] - 2026-07-02
+
+### Added
+- **Wind-mode support.** Report the commanded apparent wind angle on the MFD via
+  `65341` field `0x03` (radians × 10000, LE16 unsigned — same encoding and 0–360°
+  convention as `130306`), pinned from a real NAC-3 wind capture, and suppress the
+  field-`0x02` heading frame in wind mode as the real AP does.
+- Consume the EV-200's `65345` **Pilot Wind Datum** as the locked wind setpoint
+  echoed back to the MFD, falling back to the live apparent wind when it goes stale.
+- Decode the Vulcan **Tack/Gybe** button (Simnet `130850` key `0x11`) and drive the
+  SK V2 tack endpoint, deriving the turn side from the apparent wind angle (tack into
+  the wind, gybe away). Requires the p70's Gybe Inhibit set to *Allow Gybe* to gybe.
+- Sea-trial test protocol (`SEA-TRIAL.md`).
+
+### Fixed
+- Corrected the `65305` wind status word to `0x0400` (was `0x0406`, an htool guess)
+  to match the NAC-3 ground truth.
+
+### Changed
+- Replaced the legacy large-ChangeCourse tack heuristic (`TACK_MIN_DEG`) with the
+  dedicated `0x11` key; ChangeCourse now only carries ±1/±10 nudges.
+
 ## [0.3.5-alpha] - 2026-06-23
 
 ### Fixed
