@@ -160,7 +160,7 @@ module.exports = function (app) {
           clientId: saved.clientId,
           debug: app.debug
         })
-        writeSaved({ clientId: accessReq.clientId, token: saved.token || null })
+        writeSaved({ clientId: accessReq.clientId, token: null })   // this branch only runs when no token exists yet
         app.debug('no token configured -- requesting device access (approve under Security -> Access Requests)')
         accessReq.start((newToken) => {
           if (emulator) { emulator.setToken(newToken) }

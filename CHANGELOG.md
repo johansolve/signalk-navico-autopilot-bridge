@@ -21,10 +21,24 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Corrected the `65305` wind status word to `0x0400` (was `0x0406`, an htool guess)
   to match the NAC-3 ground truth.
+- **Crash hardening.** Guard the native `sendPGN` throw (bus-off/ENOBUFS) in both
+  `send()` paths, wrap the loopback HTTP client (`sk-autopilot`, `access-request`)
+  in try/catch with a single-fire callback and a `res` error handler, and reject
+  NaN/Infinity in `selfPathNum` — any of these could otherwise surface as an
+  uncaught exception from a timer and take the SignalK server down.
+- Stop the socketcan channel in `stop()` (not just `end()`) so a plugin restart no
+  longer leaves a zombie AC on the bus re-claiming the same address.
+- Harden fast-packet reassembly: sanity-check the frame-0 length and drop stale
+  abandoned sequences so a wrapped sequence id can't corrupt a packet.
+- Derive the Tack/Gybe turn side from the EV-200's locked wind datum when fresh
+  (stable) instead of the momentary apparent wind, which jitters across the ±90°
+  tack/gybe boundary in a seaway.
 
 ### Changed
 - Replaced the legacy large-ChangeCourse tack heuristic (`TACK_MIN_DEG`) with the
   dedicated `0x11` key; ChangeCourse now only carries ±1/±10 nudges.
+- Surface the last V2 command result in the plugin status line.
+- Remove dead `setBridge()`/`stbySent`; route `setToken` through `SkAutopilot`.
 
 ## [0.3.5-alpha] - 2026-06-23
 
