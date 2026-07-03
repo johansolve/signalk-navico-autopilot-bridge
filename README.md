@@ -373,15 +373,23 @@ the boat.
 
 This is an alpha; these are open:
 
-- **Route/Track display crashes the MFD's AP view.** Opening the dedicated
-  autopilot view from scratch while in Nav crashes a Vulcan 7 (it recovers and
-  rebinds). The cause is confirmed to be the unverified route display frames
-  (`65302`/`65305`, htool guesses): substituting the proven auto frames stops the
-  crash, but showing "Auto" while tracking is poor UX so the route frames are kept.
-  Steering in Nav works, and *switching* to Nav while the AP view is already open
-  works — only opening the view from scratch in Nav crashes it. A correct fix needs
-  a capture of a real Simrad AC in route mode. Until then, avoid opening the AP view
-  while in Nav.
+- **Route/Track display crashed the MFD's AP view — fix applied, not yet
+  sea-trialled.** Opening the dedicated autopilot view from scratch while in Nav
+  crashed a Vulcan 7 (it recovered and rebound). Steering in Nav worked, and
+  *switching* to Nav while the AP view was already open worked — only opening the
+  view from scratch in Nav crashed it. A real NAC-3 nav-mode capture has since
+  pinned the cause: in route the AP sends `65341` **field `0x0a`** with a zero value
+  (`41 9f ff ff 0a ff 00 00`) — the heading-to-steer rides `127237`. The emulator
+  had no route branch in `send65341`, so it emitted the field-`0x02` **heading**
+  frame while route was engaged; that inconsistency (AP-status reporting an
+  auto/heading field under an active route) is what crashed the view. The `65305`
+  route frames were also htool guesses. The emulator now sends the field-`0x0a`
+  frame in route and the `65305` route frames are corrected to ground truth
+  (selector-`0x02` value `0x0110`, selector-`0x0a` status word `0x0040`). **Whether
+  this stops the crash is not yet sea-trialled.** One thing the capture also showed:
+  the real NAC-3 emits **neither `65340` nor `65302`** in any mode, yet the emulator
+  still broadcasts both with guessed route values — if the crash persists, suppressing
+  those is the next candidate.
 - **Wind-mode Tack is not proven yet, although the pilot does hold wind.** On the
   sea trial the EV-200 **engaged Wind and held the apparent wind angle** and the MFD
   overlay showed *Wind*, but the **Tack button was greyed out** and ±wind-angle

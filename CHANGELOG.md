@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Route/Nav no longer crashes the MFD's AP view (pending sea-trial).** In route the
+  emulator now reports `65341` **field `0x0a`** (zero value, `41 9f ff ff 0a ff 00 00`)
+  instead of falling through to the field-`0x02` **heading** frame. A real NAC-3
+  nav-mode capture showed the AP sends only field `0x0a` in route (heading-to-steer
+  rides `127237`); the auto/heading field under an active route is what crashed the
+  Vulcan 7's AP view when opened from scratch in Nav. Also corrected the `65305` route
+  frames to ground truth (selector-`0x02` value `0x0110`, selector-`0x0a` status word
+  `0x0040` — the mode bitfield is standby `0x0008` / auto `0x0010` / wind `0x0400` /
+  route `0x0040`). The same capture showed the real NAC-3 emits neither `65340` nor
+  `65302` in any mode; the emulator still sends both with guessed route values, so
+  suppressing those is the next candidate if the crash persists.
+
 ## [0.4.0-alpha] - 2026-07-02
 
 ### Added
