@@ -4,9 +4,9 @@
 > → Raymarine EV-200): engaging and holding Auto, ±course nudges, the abort /
 > failsafe path and following a route leg all worked on the water. The commanded
 > **wind angle is now reported** (`65341` field `0x03`, pinned from a real NAC-3
-> wind capture), but whether it un-greys **Tack** on the MFD is not yet
+> wind capture), and **Tack** button is enabled on the MFD but not yet
 > sea-trialled, and some MFD display frames are still
-> unverified. One trial only, in light conditions. See
+> unverified. See
 > [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
@@ -278,6 +278,9 @@ firehose wins again between updates. Use `""`. Restart the server after editing.
 ## Protocol details
 
 Reference for the reverse-engineered N2K layer; not needed to set the plugin up.
+The full command/response catalogue — every `130850` key and the per-mode
+`65341`/`65305`/`65340` state frames, with a ground-truth source tag per row — is
+in **[PROTOCOL-REFERENCE.md](PROTOCOL-REFERENCE.md)**. The summary below is the gist.
 
 ### Command decoding
 
