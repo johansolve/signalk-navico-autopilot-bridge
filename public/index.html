@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Navico autopilot bridge</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="bar-inner">
+      <div class="brand">
+        <img class="logo" src="favicon.svg" alt="" width="26" height="26">
+        <div>
+          <h1>Navico autopilot bridge</h1>
+          <p class="sub">A Navico plotter's buttons steering a SignalK autopilot</p>
+        </div>
+      </div>
+      <div class="bar-right">
+        <span id="steer" class="pill" role="status" aria-live="polite">…</span>
+        <a id="cfg" class="cfg" href="#">Config</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="banner" class="banner hidden" role="status" aria-live="polite"></div>
+
+    <section class="flow" aria-label="Data path">
+      <!-- MFD -->
+      <article class="node" id="n-mfd">
+        <div class="nh"><h2>Navico MFD</h2><span class="chip">plotter</span></div>
+        <p class="ns">Autopilot control view — sends the button presses, shows the emulated AC.</p>
+      </article>
+
+      <!-- MFD <-> bridge -->
+      <div class="conn">
+        <span class="wire cmd" id="w-mfd"><i class="ar"></i><b>130850</b>&nbsp;buttons</span>
+        <span class="wire back">AC state<i class="ar"></i></span>
+      </div>
+
+      <!-- SignalK server -->
+      <section class="zone" aria-label="SignalK server">
+        <span class="zl">SignalK server</span>
+        <article class="node primary" id="n-bridge">
+          <div class="nh"><h2>Navico bridge</h2><span class="tag">this plugin</span></div>
+          <p class="ns" id="bridge-sub">Emulated AC — decodes 130850, firehoses state.</p>
+          <span class="badge" id="b-bridge">bridge —</span>
+        </article>
+        <div class="vconn"><i class="ar"></i>&nbsp;SignalK V2 API</div>
+        <article class="node" id="n-prov">
+          <div class="nh"><h2>Autopilot provider</h2><span class="chip">V2</span></div>
+          <p class="ns">Drives whichever pilot backs the V2 API.</p>
+          <span class="badge" id="b-prov">provider —</span>
+        </article>
+      </section>
+
+      <!-- bridge <-> pilot -->
+      <div class="conn">
+        <span class="wire cmd" id="w-pilot"><i class="ar"></i>engage / mode</span>
+        <span class="wire back">pilot state<i class="ar"></i></span>
+      </div>
+
+      <!-- Autopilot -->
+      <section class="zone" aria-label="Autopilot">
+        <span class="zl">Autopilot</span>
+        <article class="node" id="n-pilot">
+          <div class="nh"><h2>Autopilot</h2></div>
+          <p class="ns">The pilot being steered.</p>
+          <span class="badge" id="b-pilot">pilot —</span>
+        </article>
+        <div class="vconn ray"><i class="ar both"></i>&nbsp;own confirm</div>
+        <article class="node" id="n-head">
+          <div class="nh"><h2>Control head</h2></div>
+          <p class="ns">The pilot's own keypad — its native Track confirm.</p>
+        </article>
+      </section>
+    </section>
+
+    <section class="stats" aria-label="Live status">
+      <div class="stat"><span class="k">Bridge</span><span class="v" id="s-bridge">—</span></div>
+      <div class="stat"><span class="k">Can steer</span><span class="v" id="s-steer">—</span></div>
+      <div class="stat"><span class="k">Pilot state</span><span class="v" id="s-pilot">—</span></div>
+      <div class="stat"><span class="k">Nav confirm</span><span class="v" id="s-pending">—</span></div>
+      <div class="stat"><span class="k">Commands</span><span class="v" id="s-cmds">—</span></div>
+      <div class="stat span2"><span class="k">Last button</span><span class="v" id="s-last">—</span></div>
+      <div class="stat fill"><span class="k">Last steer result</span><span class="v mono" id="s-v2">—</span></div>
+    </section>
+
+    <p class="foot"><span id="dot" class="dot"></span><span id="dot-t">connecting…</span> · read-only · every 2&nbsp;s</p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

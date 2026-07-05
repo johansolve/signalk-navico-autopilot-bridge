@@ -29,7 +29,7 @@ module.exports = function (app) {
 
   const plugin = {
     id: 'signalk-navico-autopilot-bridge',
-    name: 'Navico autopilot bridge (Simrad AC emulator)',
+    name: 'Autopilot — Navico bridge (Simrad AC emulator)',
     description:
       'Emulates a Simrad AC12/AC42 autopilot computer so a Navico MFD (B&G ' +
       'Vulcan/Zeus, Simrad, Lowrance) binds to it and sends its autopilot ' +
@@ -200,6 +200,22 @@ module.exports = function (app) {
       emulator = null
     }
     app.setPluginStatus('Stopped')
+  }
+
+  // Read-only JSON status for the bundled status webapp (public/).
+  function statusHandler (_req, res) {
+    if (!emulator) { return res.status(503).json({ error: 'plugin not started' }) }
+    res.json(emulator.statusJson())
+  }
+  // Primary: mounted under /signalk/v1/api/... which honours read access (no admin
+  // token needed), so the webapp works for any logged-in user, not just admins.
+  plugin.signalKApiRoutes = function (router) {
+    router.get('/navico-autopilot-bridge/status', statusHandler)
+    return router
+  }
+  // Fallback: /plugins/<id>/status (admin-gated) for direct/manual access.
+  plugin.registerWithRouter = function (router) {
+    router.get('/status', statusHandler)
   }
 
   return plugin

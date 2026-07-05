@@ -1,13 +1,16 @@
-# signalk-navico-autopilot-bridge
+# Autopilot — Navico bridge
 
-> **Status: 0.3.0-alpha.** Sea-trialled on a real rig (B&G Vulcan 7 → SignalK V2
-> → Raymarine EV-200): engaging and holding Auto, ±course nudges, the abort /
-> failsafe path and following a route leg all worked on the water. The commanded
-> **wind angle is now reported** (`65341` field `0x03`, pinned from a real NAC-3
-> wind capture), and **Tack** button is enabled on the MFD but not yet
-> sea-trialled, and some MFD display frames are still
-> unverified. See
-> [Known limitations](#known-limitations) and the
+`signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
+
+> **Status: 0.5.0-alpha.** Sea-trialled on a real rig (B&G Vulcan 7 → SignalK V2
+> → Raymarine EV-200) across **several outings in varied conditions**: engaging and
+> holding Auto, ±course nudges, holding Wind, and the abort / failsafe path all
+> worked on the water. **Nav/Track engage and Tack/Gybe have NOT been sea-trialled
+> yet** — Nav engage from the MFD's own confirm dialog is **dockside-proven**
+> (2026-07-05, drives the pilot into Track without a separate control-head press, see
+> [Nav engage & confirm](#nav-engage--confirm)); Tack/Gybe is decoded but unproven.
+> A bundled [status webapp](#status-webapp) shows the live data path. See
+> [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
@@ -22,6 +25,44 @@ In other words: **press the autopilot buttons on a Navico plotter, steer a
 non-Navico pilot.** The bridge is Navico/Simrad/B&G-specific on the *input* side
 (only Navico MFDs bind to a Simrad AC) and **provider-agnostic on the output side**
 (anything that implements the SignalK V2 Autopilot API).
+
+![The bundled status webapp showing the live data path from the Navico MFD through the bridge and SignalK to the autopilot, with the pilot engaged in Track.](screenshot.png)
+
+*The bundled [status webapp](#status-webapp) — a read-only live view that gives a clear
+overview of how the pieces connect and what the pilot is doing. It is a monitor only, with
+**no control function**: steering is always done from the MFD's own autopilot buttons.*
+
+## Roles & tested hardware
+
+The bridge is written for generic **roles**. Where the rest of this README names a specific
+unit, that is the rig it was proven on — read it as your own equivalent.
+
+| Role | What it means | Tested on |
+|---|---|---|
+| **MFD** | The Navico chart plotter (B&G Vulcan/Zeus, Simrad, Lowrance) with the autopilot control view — the screen you press the buttons on. | B&G Vulcan 7 |
+| **Autopilot** / *the pilot* | The course computer that actually steers the boat, reached through a SignalK V2 autopilot provider. | Raymarine EV-200 (EV-1 + ACU-200), **sailboat** boat type |
+| **Control head** | The pilot's own keypad — engages, confirms and drops to standby independently of the MFD. | Raymarine **p70S** |
+| **Provider** | The SignalK **V2 autopilot provider** that drives the pilot. | [`@signalk/signalk-autopilot`](https://github.com/SignalK/signalk-autopilot) (`raymarineN2K`) |
+| **AC** | The **autopilot computer** the bridge *emulates* on the bus so the MFD binds to it. | Simrad AC42 / AC12 (emulated) |
+| **Bridge** | This plugin — decodes the MFD's buttons and translates them to the provider. | — |
+
+Only Navico MFDs bind to a Simrad AC (the input side is Navico-specific); the output side is
+**provider-agnostic**, though the Nav/Track engage path is currently tuned to the Raymarine
+pilot (see [Nav engage & confirm](#nav-engage--confirm)). Combinations other than the tested
+one should work but are unverified.
+
+## Requirements
+
+- A **Navico/B&G MFD** (Vulcan/Zeus, Simrad, Lowrance) with an autopilot control view.
+- An **Autopilot V2 provider** registered in SignalK with a **default pilot** — this is
+  what the bridge actually steers. On a Raymarine rig that is
+  [`@signalk/signalk-autopilot`](https://github.com/SignalK/signalk-autopilot)
+  (provider `raymarineN2K` → EV-200). **Without a provider the bridge still binds the
+  MFD and decodes its buttons, but cannot steer** — the plugin status turns red with
+  `NO AUTOPILOT PROVIDER` (detected from an empty SignalK autopilots list) and steer
+  commands fail. The bridge is provider-agnostic: any pilot reachable through the
+  SignalK autopilot API that supports `state` and the `advanceWaypoint` action works.
+- A SignalK server on the same NMEA 2000 bus (SocketCAN, `can0` by default).
 
 ## Disclaimer / no warranty
 
@@ -38,10 +79,10 @@ before you install it.
   competent helmsman must remain at the helm, keep a proper lookout, and be ready
   to take manual control and drop the pilot to standby at all times.
 - **It can fail silently or behave unexpectedly** — wrong mode, wrong course,
-  no response, or a course change at the wrong moment. Several features (Wind
-  display/adjust, Tack, route/track display) are unverified test candidates. Do
-  not trust it where a failure could cause a collision, grounding, injury, or
-  loss of life.
+  no response, or a course change at the wrong moment. **Nav/Track engage and
+  Tack/Gybe are not proven on the water**, and some MFD display frames are
+  unverified. Do not trust it where a failure could cause a collision, grounding,
+  injury, or loss of life.
 - **You are responsible.** By installing or running this software you accept full
   responsibility for any consequences. Only ever use it with the **boat secured,
   the engine off, and the pilot's own control head to hand**, until you have
@@ -80,7 +121,7 @@ as the server.
    anything that steers — the backing pilot has its own commissioning — so they
    can be left at defaults or skipped. The one setting that matters is **boat
    type**: set it to **Sail** so the MFD exposes wind mode and the tack buttons
-   (per the Vulcan manual those functions require a Sail boat type).
+   (per the MFD manual those functions require a Sail boat type).
 3. **Input bridge** — reassembles incoming `130850` commands, decodes the Simnet
    key byte, and (in `live` mode) calls the V2 Autopilot API.
 
@@ -103,7 +144,8 @@ Do the steps below in order:
 
 Install it from the **SignalK app store**: in the SignalK admin UI open
 **Appstore → Available**, search for *Navico autopilot bridge*, install it, and
-restart the server. It is published as an **alpha** — read the
+restart the server. It then appears under **Server → Plugin Config** as
+**Autopilot — Navico bridge**. It is published as an **alpha** — read the
 [Disclaimer](#disclaimer--no-warranty) first.
 
 `@canboat/canboatjs` is a peerDependency already present in a SignalK server
@@ -124,7 +166,7 @@ Restart the SignalK server, then enable and configure the plugin under
 | option | default | notes |
 |---|---|---|
 | CAN interface | `can0` | SocketCAN interface |
-| Emulated AC model | `AC42` | both `AC42` and `AC12` bind a Vulcan 7; the model only sets the reported product info, not whether it binds |
+| Emulated AC model | `AC42` | both `AC42` and `AC12` bind the MFD; the model only sets the reported product info, not whether it binds |
 | Preferred N2K address | `35` | address the emulated AC claims |
 | Broadcast AC autopilot state | `true` | the firehose; required for binding — leave on |
 | Standard nav PGNs | `false` | duplicates other sources; A/B testing only |
@@ -286,15 +328,16 @@ in **[PROTOCOL-REFERENCE.md](PROTOCOL-REFERENCE.md)**. The summary below is the 
 
 canboatjs 2.10 has an incomplete `130850` definition for this Simnet layout, so
 the bridge decodes on the raw **key byte**, gated by group `0x0a`, not on
-canboat's mislabeled `Event` field. Keys verified live against a Vulcan 7:
+canboat's mislabeled `Event` field. Keys verified live against the MFD:
 
 | key (byte 6) | command | maps to |
 |---|---|---|
 | `0x06` | Standby | `PUT state {standby}` |
 | `0x09` | Auto | `PUT state {auto}` |
 | `0x0f` | Wind | `PUT state {wind}` |
-| `0x0a` | Nav / Track | `PUT state {route}` |
-| `0x1a` | ChangeCourse / Tack | `PUT target/adjust`, or `POST tack/*` for ~90° |
+| `0x0a` | Nav / Track | `PUT state {route}` (two-press engage, see [Nav engage & confirm](#nav-engage--confirm)) |
+| `0x1a` | ChangeCourse | `PUT target/adjust` (±1° / ±10°) |
+| `0x11` | Tack / Gybe | `POST tack/{port\|starboard}` (wind mode only) |
 | `0x0c` | No Drift | decoded, not fired (no V2 state) |
 | `0x1c` | key-press envelope | ignored (precedes every command) |
 
@@ -306,30 +349,24 @@ the bridge decodes from the reassembled raw frame. The V2 `adjustTarget` floors
 is rounded to a whole degree `N` and sent as `(N+0.5)°` in radians, landing the
 floor exactly on `N`.
 
-**Tack** rides the same `0x1a` channel at the MFD's configured tack angle
-(B&G Vulcan UI default 100°; htool saw 90°), not a separate key. A single
-ChangeCourse well above the buttons' ±10 is treated as a tack — but **only in
-wind mode**, where a tack crosses the wind (a gybe crosses dead downwind);
-outside wind mode a big ChangeCourse is ignored. The magnitude is discarded: the
-pilot mirrors the apparent wind angle itself. The tack **direction is derived
-from SK's `environment.wind.angleApparent`** (positive to starboard → tack to
-starboard), not the unverified MFD dir byte, and mapped to
-`POST tack/port|tack/starboard`
-(channel per [htool](https://github.com/htool/RaymarineAPtoFakeNavicoAutoPilot)).
-Test candidate — depends on the backing provider supporting tack, and the
-turn-direction convention still needs on-board verification.
+**Tack / Gybe** is its own key `0x11` (no direction or magnitude in the frame — the
+MFD picks the *label* Tack/Gybe but sends the same key). The bridge fires it only in
+wind mode with the pilot engaged, deriving the turn side from the pilot's locked
+wind datum (`65345`) when fresh, else the live apparent wind, and mapping to
+`POST tack/{port|starboard}` — the pilot mirrors the wind angle to the other side (a
+tack when the wind is forward, a gybe when aft). **Requires the pilot's *Gybe Inhibit*
+set to *Allow Gybe*** to gybe. Not sea-trialled. Byte layout in
+[PROTOCOL-REFERENCE §2.4](PROTOCOL-REFERENCE.md).
 
 ### Mode display (firehose)
 
-The MFD's displayed mode is driven by the firehose, not by the button press. Per
-htool, `65305` `00,1d,..` sets the displayed mode and `00,0a,..` the state; the
-plugin sends distinct per-mode `65340`/`65302`/`65305` frames (auto `10,01`, wind
-`10,03`, nav `10,06`) plus a mode-change announce. The overlay followed
-standby/auto/wind/route correctly on the sea trial. A NAC-3 wind capture has since
-confirmed the `65305` selector-`0x0a` mode word — standby `0x0008`, auto `0x0010`,
-**wind `0x0400`** (the plugin's earlier `0x0406` was an htool guess and has been
-corrected to `0x0400`). The `65340` wind code is still the unverified `10,03`; the
-route display frames remain **test candidates** (htool guesses).
+The MFD's displayed mode is driven by the firehose, not by the button press: the
+plugin sends per-mode `65305`/`65340`/`65302` frames plus a mode-change announce, and
+the overlay followed standby/auto/wind/route correctly on the sea trials. The
+`65305` and `65341` frames for auto/wind/route are now pinned to real NAC-3 captures
+(ground truth); the `65340`/`65302` frames remain htool guesses (a real NAC-3 emits
+neither). Per-mode byte values and source tags are in
+[PROTOCOL-REFERENCE §3](PROTOCOL-REFERENCE.md).
 
 ### Set heading (127237)
 
@@ -345,85 +382,89 @@ Magnetic; the MFD converts to its configured heading reference (e.g. True) using
 the bus magnetic variation, so set the MFD's heading units to match the rest of
 the boat.
 
-## Verified behaviour (Vulcan 7 → EV-200)
+## Verified behaviour (on the tested rig)
 
 - MFD binds to the emulator and raises a *lost-autopilot* alarm the instant the
   firehose stops.
 - "Press standby" commissioning gate opens; dockside config fields populate.
 - Control view reachable and live **without finishing the wizard**.
 - Standby / Auto / Wind / Nav(Track) / ±course button presses decode and, in
-  `live`, drive the EV-200 (clutch engages, rudder moves, P70 and the Vulcan
-  overlay reflect the mode). The overlay label followed the pilot in every mode
-  during the trial.
+  `live`, drive the pilot (clutch engages, rudder moves, the control head and the
+  MFD overlay reflect the mode). The overlay label followed the pilot in every mode
+  during the sea trials.
 - **Set heading** displays on the MFD (both the overlay and the AP view) via the
-  populated `127237`; ±course on the Vulcan changes it and is confirmed on the
+  populated `127237`; ±course on the MFD changes it and is confirmed on the
   MFD without touching the pilot's own head.
-- **Track restart** from the Vulcan's autopilot control works fine. The MFD
+- **Track restart** from the MFD's autopilot control works fine. The MFD
   handles it internally (it does not require the bridge to act on a distinct
   command), so nothing extra is decoded on this side.
 
-### Sea trial (on the water, light wind, calm sea, single trial)
+### Sea trials (on the water, several outings in varied conditions)
 
-- **Auto holds course** with way on; the abort path is sound: **P70 standby frees
-  the helm immediately**, and standby from the Vulcan drops the pilot.
+- **Auto holds course** with way on; the abort path is sound: **standby on the control
+  head frees the helm immediately**, and standby from the MFD drops the pilot.
 - **±1° / ±10°** nudges alter heading by the right amount and direction; a
   cumulative ~60° alteration came round without an accidental tack.
-- **Nav** steered along a route leg toward the waypoint and corrected cross-track.
 - **Wind** engaged and **held the apparent wind angle**, overlay showed *Wind* —
   but see the Tack limitation below.
+
+> **Not sea-trialled yet: Nav/Track engage and Tack/Gybe.** Nav/Track engage from the
+> MFD is **dockside-proven** (2026-07-05) but not tested under way; Tack/Gybe is
+> decoded but unproven. Verify both on the water before relying on them.
+
+## Nav engage & confirm
+
+Engaging Nav is a **two-press** flow, so the MFD raises its own confirm dialog and
+the confirmation on the MFD engages the pilot — **no separate press on the pilot's own
+control head** (dockside-proven 2026-07-05):
+
+1. **Press Nav** on the MFD. The bridge arms the confirm window and puts the pilot
+   into route: the pilot goes to **Track-pending** and the MFD raises its *engage
+   nav?* dialog. (The pilot beeps here — it is waiting for confirmation.)
+2. **Confirm on the MFD** (its OK sends a second Nav). The bridge fires the engage and
+   the pilot latches **Track-engaged** — the same thing its own control head's Track
+   confirm does.
+
+Under the hood the engage uses the SignalK **V1 `steering.autopilot.actions.advanceWaypoint`**
+action (it emits the Raymarine Track-to-waypoint command, `65379 → 0x0181`). It does
+**not** use the V2 `courseNextPoint` action, which `@signalk/signalk-autopilot` 2.6.0
+leaves unimplemented. Because SignalK maps both Track-pending and Track-engaged to the
+same `route` state, the bridge **sniffs the pilot's own `65379`** off the bus to tell
+the two apart — so the MFD dialog clears exactly when the pilot really engages, and a
+control-head confirm (if you use it instead) clears it too. Requires the pilot to have accepted
+route first; if it hasn't, the engage is safely rejected rather than fired blind.
+
+## Status webapp
+
+The plugin bundles a small **status webapp** — open it from the SignalK **Webapps**
+menu ("Navico autopilot bridge"). It draws the live data path — MFD → bridge → SignalK
+→ provider → pilot, with its control head — and shows the current bridge mode, the pilot's
+real state (standby / auto / wind / route-pending / route-engaged), whether a nav
+confirm is pending, whether an autopilot provider is present, and the last button and
+steer result. It is **read-only** (no settings; a link takes you to the plugin config)
+and updates every 2 s.
 
 ## Known limitations
 
 This is an alpha; these are open:
 
-- **Route/Track display crashed the MFD's AP view — fix applied, not yet
-  sea-trialled.** Opening the dedicated autopilot view from scratch while in Nav
-  crashed a Vulcan 7 (it recovered and rebound). Steering in Nav worked, and
-  *switching* to Nav while the AP view was already open worked — only opening the
-  view from scratch in Nav crashed it. A real NAC-3 nav-mode capture has since
-  pinned the cause: in route the AP sends `65341` **field `0x0a`** with a zero value
-  (`41 9f ff ff 0a ff 00 00`) — the heading-to-steer rides `127237`. The emulator
-  had no route branch in `send65341`, so it emitted the field-`0x02` **heading**
-  frame while route was engaged; that inconsistency (AP-status reporting an
-  auto/heading field under an active route) is what crashed the view. The `65305`
-  route frames were also htool guesses. The emulator now sends the field-`0x0a`
-  frame in route and the `65305` route frames are corrected to ground truth
-  (selector-`0x02` value `0x0110`, selector-`0x0a` status word `0x0040`). **Whether
-  this stops the crash is not yet sea-trialled.** One thing the capture also showed:
-  the real NAC-3 emits **neither `65340` nor `65302`** in any mode, yet the emulator
-  still broadcasts both with guessed route values — if the crash persists, suppressing
-  those is the next candidate.
-- **Wind-mode Tack is not proven yet, although the pilot does hold wind.** On the
-  sea trial the EV-200 **engaged Wind and held the apparent wind angle** and the MFD
-  overlay showed *Wind*, but the **Tack button was greyed out** and ±wind-angle
-  adjust from the Vulcan had no effect — because the emulator's `65341` then carried
-  only heading, never a wind reference. A real NAC-3 wind capture has since pinned
-  the commanded wind angle to **`65341` field `0x03`** (radians × 10000, LE16
-  unsigned — the same encoding and 0–360° convention as `130306`, proven by the
-  field tracking the live apparent wind to the bit at engage). The emulator now sends
-  that frame in wind mode (and suppresses the field-`0x02` heading, as the real AP
-  does), `rad16`'s unsigned wrap mapping SK's signed apparent wind angle (port
-  negative) onto the AP's 0–360°. **Whether this un-greys Tack and shows the wind
-  angle on the MFD is not yet sea-trialled.** Tack itself is decoded (~90°
-  ChangeCourse → V2 tack endpoint). One gap remains: there is no SK path for the
-  *locked* wind datum (the EV-200's `65345` Pilot Wind Datum is undecoded), so until
-  that is added the reported angle follows the live apparent wind, not the held
-  setpoint.
-- **Some mode-display frames are still guesses.** The per-mode firehose frames
-  (from htool) made the Vulcan overlay follow standby/auto/wind/route correctly
-  throughout the sea trial, but some are unverified. If one is wrong the pilot is
-  still in the correct mode (confirm on its own control head); only the Navico
-  MFD's mode label would be off.
+- **Tack/Gybe is not sea-trialled.** The pilot holds Wind on the water and the
+  commanded wind angle is now reported on the MFD (`65341` field `0x03`, pinned from a
+  NAC-3 ground-truth capture); Tack is enabled and its turn side is derived from the
+  pilot's locked wind datum (`65345`, which SK core already maps). But the maneuver
+  itself has not been performed under way. Gybing needs the pilot's *Gybe Inhibit*
+  set to *Allow Gybe*.
+- **Some display frames are still guesses.** The `65340`/`65302` per-mode frames are
+  htool guesses (a real NAC-3 emits neither). If one is wrong the pilot is still in the
+  correct mode (confirm on its own head); only the Navico MFD's mode label could be off.
 - **No Drift (`0x0c`) has no V2 equivalent** — the V2 states are only
-  standby/auto/wind/route. Logged, never fired. In practice this is a non-issue
-  for a Raymarine backing pilot: the EV-200 applies the equivalent
-  drift/cross-track compensation by default in its course-hold modes, so the No
-  Drift behaviour is effectively always on regardless of the button.
-- **Only one sea trial, in light conditions.** Auto course-hold, ±course, the
-  abort path and route-leg tracking are proven on the water — but in light wind
-  (~10 kn), calm sea, at ~4 kn with a single crew. Holding quality in stronger
-  wind and sea, and waypoint advance along a multi-leg route, are not yet proven.
-  (Auto behaviour may also differ on other pilots.)
+  standby/auto/wind/route, so it is logged, never fired. Harmless with a Raymarine
+  backing pilot: the pilot applies the equivalent cross-track compensation in its
+  course-hold modes anyway.
+- **Not every condition or pilot is covered.** Auto, ±course, Wind and the abort path
+  are proven on the water across several outings in varied conditions, but holding
+  quality in the strongest wind and sea, and waypoint advance along a multi-leg route,
+  are not yet proven — and behaviour may differ on other backing pilots.
 - **Output is via loopback HTTP** with a configured token. An in-process V2 call
   would remove the token requirement but there is no clean documented path for a
   non-provider plugin to set V2 state; this is a candidate for a later version.

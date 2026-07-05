@@ -114,7 +114,7 @@ button *label* (Tack when the wind is forward, Gybe when aft) but sends the same
 key; the pilot derives tack-vs-gybe and the turn side from the wind. The bridge,
 only in wind mode with the pilot engaged and SK state fresh, derives
 `isGybe = |AWA| > 90°` and `dir = (AWA>0) === isGybe ? 'port' : 'starboard'`, then
-`POST /tack/{dir}`. **Requires the p70's Gybe Inhibit = *Allow Gybe*** to gybe
+`POST /tack/{dir}`. **Requires the pilot's Gybe Inhibit = *Allow Gybe*** to gybe
 away from the wind. `sea-trial`
 
 ### 2.5 MFD dialects diverge — this bridge follows B&G
@@ -141,6 +141,7 @@ Field selector at **byte 4**; value LE16 at bytes 6-7 (rad × 10000, unsigned).
 |---|---|---|---|---|
 | wind | `41 9f ff ff 03 ff <awa_lo> <awa_hi>` | `0x03` | commanded apparent wind angle | `nac3-wind` |
 | auto | `41 9f ff ff 02 ff <hdg_lo> <hdg_hi>` | `0x02` | locked heading | `sea-trial` |
+| route (pending) | `41 9f ff ff 0d ff <hdg_lo> <hdg_hi>` | `0x0d` | course-to-confirm (NAC-3: ~14°) | `nac3-nav` |
 | route | `41 9f ff ff 0a ff 00 00` | `0x0a` | 0 (heading-to-steer rides 127237) | `nac3-nav` |
 | standby | rotates `ANGLE_STATIC`: `…ff 0d ff ff 7f` / `…0c…` / `…0b…` / `…03…` | `0x0d`/`0c`/`0b`/`03` | NA | `ac42-comm` `htool-guess` |
 
@@ -153,6 +154,9 @@ Field selector at **byte 4**; value LE16 at bytes 6-7 (rad × 10000, unsigned).
 - Route field-`0x0a` is the fix for the Nav-view crash: previously route fell to the
   field-`0x02` heading frame, and an auto/heading field under an active route
   crashed the Vulcan's AP view. See README.
+- Route field-`0x0d` is the **nav-confirm pending** frame, carried between the first
+  Nav press and the confirm (see §6). It holds a course-to-steer to confirm (NAC-3:
+  `0d,ff,27,07` / `0d,ff,85,09`); the bridge fills it with the target/current heading.
 
 ### 3.2 PGN 65305 — device status (2 Hz)
 
@@ -168,8 +172,19 @@ Selector-`0x0a` status word is a per-mode bitfield — ground truth `nac3-wind` 
 | standby | `0x0008` | `0x0002` | `nac3-wind` |
 | auto | `0x0010` | `0x0010` | `nac3-nav` |
 | wind | `0x0400` | `0x0010` | `nac3-wind` |
+| route (pending) | current mode `\| 0x0080` (from auto → `0x0090`, from wind → `0x0480`) | `0x0010` | `nac3-nav` |
 | route | `0x0040` | `0x0110` | `nac3-nav` |
 
+- **Pending status word is mode-dependent**, not a constant: the `0x0080` "confirm
+  requested" bit ORed onto whatever mode you engage Nav *from* (auto → `0x0090`,
+  wind → `0x0480`). The bridge derives it in `send65305` as
+  `(commandedMode === 'wind' ? 0x0400 : 0x0010) | 0x0080`. This is the bit that drives
+  the MFD's confirm dialog (see §6).
+- **Route selector-`0x02` = `0x0110` lags the latch.** In `nac3-nav` sel-`0x02` stayed
+  `0x0010` through pending *and* the first ~15 s of engaged route, only flipping to
+  `0x0110` mid-leg — so `0x0100` is leg/XTE data, **not** a route-latch marker. The
+  bridge emits `0x0110` immediately and the Vulcan tolerates it, but don't read the
+  bit as "route engaged".
 - The bridge does not match every ground-truth status word: its auto is `0x0016`
   (vs `0x0010`) and its standby is `0x000a` (vs `0x0008`) — extra spare bits. Neither
   crashes, so both are left as-is; only the route frames were corrected (§3.1/§3.2).
@@ -219,29 +234,35 @@ Modes: **standby / auto / wind / route.** Observed on the NAC-3 driving a real l
 (activate waypoint → nav from wind → auto → nav → arrival → auto → wind):
 
 - **Wind → Nav is a hard reject.** A NAV command issued in wind does **not** engage
-  route; the AP hangs in a transient **65341 field `0x0d`** (nav-pending) and stays
-  there (~8 s in the capture) until **Auto** is commanded, which forces it out.
-- **Route is reached via Auto → Nav.** From auto, NAV passes briefly through field
-  `0x0d` and latches to field `0x0a` (route). In the capture the NAV command had to
-  be sent **twice** (first → `0x0d`, second → `0x0a`) before route latched.
+  route; the AP hangs in the **65341 field `0x0d`** (nav-pending). It held there for
+  ~8 s in the capture, but that was just the time until **Auto** was pressed (which
+  forces it out) — **not** the AP's own pending timeout, which the capture doesn't pin.
+- **Route is reached via Auto → Nav.** From auto, NAV passes through field `0x0d`
+  (pending) and latches to field `0x0a` (route) on a **second** Nav press. That
+  two-press = the confirm handshake — see §6 for how the bridge emulates it.
 - **Arrival → Auto.** On waypoint arrival the MFD commanded Auto (key `0x09`) and
   the AP dropped route to heading-hold. No arrival alarm (130850 alarm-class /
   130856) appeared in the capture — the transition was MFD-driven.
 
-The MFD enforces the Auto-before-Nav sequencing itself (it sent Auto then Nav), so
-the bridge relays each command as it arrives and needs no sequencing logic. The
-bridge's `commandedMode` is optimistic (set on the button); the firehose is
-corrected to the pilot's real SK state in live mode.
+The NAC-3 capture showed the MFD sequencing **Auto then Nav**; a **B&G Vulcan from
+standby sends only Nav (`0x0a`)** and the EV-200 goes standby → pending directly
+(`sea-trial`, `nav_test*`). Either way the bridge relays each command as it arrives
+and needs no sequencing logic. `commandedMode` is optimistic (set on the button); the
+firehose is corrected to the pilot's real SK state in live mode.
 
 ---
 
 ## 5. OUTPUT side of the *real* pilot (EV-200, Raymarine mfr 1851)
 
-For reference — how the EV-200 reports its own state back (the bridge reads SK,
-which already maps these):
+For reference — how the EV-200 reports its own state back. The bridge reads most of
+these via SK, but **sniffs 65379 directly off the bus** (see §6):
 
-- **65379 Pilot Mode** strings: `"Auto, compass commanded"` / `"Vane, Wind Mode"` /
-  `"Track Mode"`.
+- **65379 Pilot Mode** (src 204, header `3b,9f`, mode word LE16 at bytes 2-3). Strings:
+  `"Auto, compass commanded"` / `"Vane, Wind Mode"` / `"Track Mode"`. Ground-truth mode
+  words (`sea-trial`, `nav_test*`): **`0x0000` standby / `0x0040` auto / `0x0180`
+  Track-pending (beeping, awaiting confirm) / `0x0181` Track-engaged.** `n2k-signalk`
+  4.6.0 maps mode 128/129 + subMode 1 → SK state `'route'`, so SK cannot tell pending
+  from engaged — which is why the bridge sniffs the raw word.
 - **65345 Pilot Wind Datum** — the locked target wind angle, **unsigned 0..2π** @
   0.0001 rad (port is 180–360° on the wire, *not* negative). SK core already maps
   it to `steering.autopilot.target.windAngleApparent` and sign-converts to −π..π;
@@ -251,10 +272,55 @@ which already maps these):
 
 ---
 
-## 6. Cross-references
+## 6. Nav engage & confirm handshake
+
+Engaging Nav/route is a **two-press** flow, mirrored from the NAC-3 (§4) so the MFD
+raises its own confirm dialog, and wired so the **MFD confirm engages the EV-200
+without a separate P70 press** (`sea-trial` 2026-07-05, `nav_test5`).
+
+**Nav press #1 — arm pending + request engage:**
+- Bridge sets `navPending`, sends `PUT /state route` → the EV-200 goes to
+  **65379 `0x0180` (Track-pending)** and starts beeping for confirmation.
+- Firehose emits the pending frames: **65305** selector-`0x0a` = mode `| 0x0080`
+  (§3.2) and **65341** selector-`0x0d` (§3.1). The MFD's "engage nav?" dialog is
+  driven by that **`0x0080` bit**.
+
+**Nav press #2 — the MFD confirm:** the dialog's OK button sends a **byte-identical
+second `0x0a`** (there is no distinct confirm opcode). The bridge then fires the
+engage:
+
+> **Engage = V1 PUT `steering.autopilot.actions.advanceWaypoint`, NOT V2
+> `courseNextPoint`.** `@signalk/signalk-autopilot` **2.6.0** (what runs on Libelle)
+> **stubs the V2 action** (`throw 'Not implemented!'` → HTTP 500), but registers the
+> V1 PUT handler → `putAdvanceWaypoint`, which emits **65379 `0x0181`
+> (Track-engaged)** — the exact `126208`-group-function the P70's Track confirm sends.
+> Guarded server-side by `state === 'route'` (a free safety: no route PUT → no engage).
+> The bridge uses `PUT /signalk/v1/api/vessels/self/steering/autopilot/actions/advanceWaypoint`.
+
+**Why the P70 never reacts to the MFD confirm:** `130850` is **Simnet** (Navico); the
+EV-200 is **Raymarine** and ignores it entirely. The only MFD→EV-200 path is the
+bridge (`130850` → SK → `126208`).
+
+**Latch / abort via the 65379 sniffer.** SK maps both `0x0180` and `0x0181` to
+`'route'`, so it can't tell pending from engaged. `reconcileNavPending` (2 Hz) reads
+the sniffed word (§5): latch the MFD display on observed **`0x0181`** (covers a
+P70-only confirm too), and clear the pending dialog if the pilot leaves the flow
+(e.g. Standby → `0x0000`). A 20 s timeout is the anti-stuck fallback.
+
+**Provider requirement.** The bridge's OUTPUT half needs an **Autopilot V2 provider**
+with a default pilot (on Libelle: `@signalk/signalk-autopilot`, `raymarineN2K` →
+EV-200). Without one the bridge still binds the MFD and decodes buttons (firehose /
+dry-run) but **cannot steer**. It detects the absence from an **empty V2 autopilots
+list** (`GET /autopilots` → `{}`) — not from `/autopilots/<id>`, which returns **500**
+(not 404) with no provider — and surfaces `NO AUTOPILOT PROVIDER` in its status. The
+bridge is provider-agnostic: any pilot reachable through the SignalK autopilot API that
+supports `state` and the V1 `advanceWaypoint` action works.
+
+---
+
+## 7. Cross-references
 
 - **Kees / canboat n2k_research** (github.com/canboat/n2k_research): raw-PGN RE,
   `navico/ac42/` commissioning analysis + generic `fake-ac.js`, and
   `candump/AUTOPILOT_CONTROL.md` (merrimac-rs control PGNs — different dialect).
 - **`lib/ac-emulator.js`** — the byte constants and decode/firehose logic.
-- **`SEA-TRIAL.md`** — the on-water test protocol.

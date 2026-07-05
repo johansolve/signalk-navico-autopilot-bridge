@@ -4,20 +4,42 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0-alpha] - 2026-07-05
+
+### Added
+- **Nav/Track engage from the MFD's own confirm dialog — no separate P70 press.** Nav is
+  a two-press flow: the first press arms the confirm window (pilot → Track-pending, the
+  MFD raises its "engage nav?" dialog); the confirm (second press) fires the SignalK
+  **V1 `steering.autopilot.actions.advanceWaypoint`** action, engaging Track-to-waypoint
+  (`65379 → 0x0181`), byte-identical to the P70's Track confirm. Dockside-proven
+  2026-07-05. Uses V1 advanceWaypoint deliberately — the V2 `courseNextPoint` action is
+  unimplemented (`throw 'Not implemented!'`) in `@signalk/signalk-autopilot` 2.6.0.
+- **Sniff the EV-200's own PGN `65379`** off the bus to distinguish Track-pending
+  (`0x0180`) from Track-engaged (`0x0181`) — SignalK maps both to `route`, so this is the
+  only way to latch the MFD confirm dialog on the real engage and to clear it if the
+  pilot bails.
+- **Bundled read-only status webapp** (`public/`) that draws the live data path
+  (MFD → bridge → SignalK → provider → pilot) and shows the bridge mode, the pilot's real
+  state, nav-confirm status, provider presence and the last button/result. Registered
+  with a helm `appIcon` and served read-only via `signalKApiRoutes`.
+- **`NO AUTOPILOT PROVIDER` detection.** With no V2 autopilot provider registered the
+  bridge still binds the MFD but cannot steer; it detects this from an empty `/autopilots`
+  list (the `/autopilots/<id>` endpoint returns 500, not 404) and reports it as a **red
+  plugin-error status** (as it does for live-without-a-token) so a green badge never sits
+  next to "cannot steer".
+
+### Changed
+- Plugin display name is now **Autopilot — Navico bridge (Simrad AC emulator)** so it
+  sorts under Autopilot in the Server → Plugin Config list. The plugin id is unchanged.
 
 ### Fixed
-- **Route/Nav no longer crashes the MFD's AP view (pending sea-trial).** In route the
-  emulator now reports `65341` **field `0x0a`** (zero value, `41 9f ff ff 0a ff 00 00`)
-  instead of falling through to the field-`0x02` **heading** frame. A real NAC-3
-  nav-mode capture showed the AP sends only field `0x0a` in route (heading-to-steer
-  rides `127237`); the auto/heading field under an active route is what crashed the
-  Vulcan 7's AP view when opened from scratch in Nav. Also corrected the `65305` route
-  frames to ground truth (selector-`0x02` value `0x0110`, selector-`0x0a` status word
-  `0x0040` — the mode bitfield is standby `0x0008` / auto `0x0010` / wind `0x0400` /
-  route `0x0040`). The same capture showed the real NAC-3 emits neither `65340` nor
-  `65302` in any mode; the emulator still sends both with guessed route values, so
-  suppressing those is the next candidate if the crash persists.
+- **Route/Nav no longer crashes the MFD's AP view (dockside-proven 2026-07-05).**
+  In route the emulator reports `65341` field `0x0a` (zero value) instead of falling
+  through to the field-`0x02` heading frame, and the `65305` route frames are corrected
+  to NAC-3 ground truth (selector-`0x02` `0x0110`, selector-`0x0a` status word `0x0040`).
+  The auto/heading field under an active route is what crashed the Vulcan 7's AP view.
+  Opening the AP view during an active route, and engaging/confirming Nav from the AP
+  view's own dialog, both work with no crash.
 
 ## [0.4.0-alpha] - 2026-07-02
 
