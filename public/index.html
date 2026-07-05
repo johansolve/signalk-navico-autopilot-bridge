@@ -32,6 +32,7 @@
       <article class="node" id="n-mfd">
         <div class="nh"><h2>Navico MFD</h2><span class="chip">plotter</span></div>
         <p class="ns">Autopilot control view — sends the button presses, shows the emulated AC.</p>
+        <p class="ident" id="mfd-id"></p>
       </article>
 
       <!-- MFD <-> bridge -->
@@ -52,6 +53,7 @@
         <article class="node" id="n-prov">
           <div class="nh"><h2>Autopilot provider</h2><span class="chip">V2</span></div>
           <p class="ns">Drives whichever pilot backs the V2 API.</p>
+          <p class="ident" id="prov-id"></p>
           <span class="badge" id="b-prov">provider —</span>
         </article>
       </section>
@@ -68,12 +70,15 @@
         <article class="node" id="n-pilot">
           <div class="nh"><h2>Autopilot</h2></div>
           <p class="ns">The pilot being steered.</p>
+          <p class="ident" id="pilot-id"></p>
+          <p class="ident sub-id" id="acu-id"></p>
           <span class="badge" id="b-pilot">pilot —</span>
         </article>
         <div class="vconn ray"><i class="ar both"></i>&nbsp;own confirm</div>
         <article class="node" id="n-head">
           <div class="nh"><h2>Control head</h2></div>
           <p class="ns">The pilot's own keypad — its native Track confirm.</p>
+          <p class="ident" id="head-id"></p>
         </article>
       </section>
     </section>

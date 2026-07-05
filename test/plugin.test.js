@@ -22,13 +22,18 @@ test('module exports a constructor returning a valid plugin', () => {
   assert.strictEqual(typeof plugin.name, 'string')
   assert.strictEqual(typeof plugin.start, 'function')
   assert.strictEqual(typeof plugin.stop, 'function')
-  assert.strictEqual(typeof plugin.schema, 'object')
+  // schema is a function (SignalK supports both forms) so it can weave live-detected
+  // device names into the config-page description; calling it must yield a valid schema.
+  assert.strictEqual(typeof plugin.schema, 'function')
+  const schema = plugin.schema()
+  assert.strictEqual(schema.type, 'object')
+  assert.ok(schema.properties && typeof schema.properties === 'object')
 })
 
 test('start() with schema defaults does not throw', () => {
   const plugin = require('..')(mockApp())
   const defaults = Object.fromEntries(
-    Object.entries(plugin.schema.properties || {}).map(([k, v]) => [k, v.default])
+    Object.entries(plugin.schema().properties || {}).map(([k, v]) => [k, v.default])
   )
   // canboatjs/can0 are absent here; start() must catch internally and not throw.
   assert.doesNotThrow(() => plugin.start(defaults))

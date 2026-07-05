@@ -51,10 +51,19 @@ const EV_ST = {
 function cls (el, base, extra) { el.className = base + (extra ? ' ' + extra : '') }
 function setV (id, val, k) { const el = $(id); el.textContent = val; el.className = 'v' + (id === 's-v2' ? ' mono' : '') + (k ? ' ' + k : '') }
 
+function setIdent (id, name) { const el = $(id); if (el) { el.textContent = name || '' } }
+
 function render (d) {
   const evState = d.evPilotState
   const pending = evState === 'route-pending' || d.navPending
   const engaged = evState === 'route-engaged'
+
+  // resolved device names (from the server's N2K source registry), empty = hidden
+  setIdent('mfd-id', d.mfdName)
+  setIdent('pilot-id', d.pilotName)
+  setIdent('acu-id', d.acuName)
+  setIdent('head-id', d.controlHeadName)
+  setIdent('prov-id', d.noProvider ? '' : ('Signal K autopilot' + (d.providerId ? ' · ' + d.providerId : '')))
 
   // bridge node
   const bcls = { 'live': 'st-live', 'dry-run': 'st-dry', 'off': 'st-off' }[d.bridge] || 'st-off'

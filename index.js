@@ -39,7 +39,7 @@ module.exports = function (app) {
       'ALPHA: see README for verified behaviour and known limitations.'
   }
 
-  plugin.schema = {
+  const baseSchema = {
     type: 'object',
     required: ['canInterface', 'acModel', 'preferredAddress', 'bridge'],
     properties: {
@@ -92,7 +92,7 @@ module.exports = function (app) {
       autopilotId: {
         type: 'string',
         title: 'Target autopilot id (V2 API)',
-        description: 'Which autopilots/<id> the V2 API drives. Usually _default.',
+        description: 'Which `autopilots/<id>` the V2 API drives. Usually `_default`.',
         default: '_default'
       },
       skHost: {
@@ -131,6 +131,45 @@ module.exports = function (app) {
         default: 44
       }
     }
+  }
+
+  // The config-page schema is built fresh each time the admin UI requests it, so the
+  // device names resolved live off the N2K bus can be woven into the relevant field
+  // descriptions (SignalK only re-reads the schema on page load, so this is not live --
+  // the status webapp shows the same info live). Falls back to the base schema on any error.
+  plugin.schema = function () {
+    try {
+      const s = JSON.parse(JSON.stringify(baseSchema))
+      const d = (emulator && typeof emulator.statusJson === 'function') ? emulator.statusJson() : null
+      if (d) {
+        // Weave each detected device into the field it relates to, formatted as markdown
+        // (enabled per field via plugin.uiSchema) so it renders as a clean list rather than
+        // run-on text -- the admin UI only renders markdown in field descriptions, not the
+        // root/top block. MFD -> the AC-model field (which binds it); pilot chain -> the
+        // target-autopilot-id field (which selects the V2 provider that drives it).
+        if (d.mfdName && s.properties.acModel) {
+          s.properties.acModel.description += '\n\n**Bound MFD:** ' + d.mfdName
+        }
+        if (s.properties.autopilotId) {
+          const rows = []
+          if (d.pilotName) { rows.push('- Course computer: ' + d.pilotName) }
+          if (d.acuName) { rows.push('- Actuator: ' + d.acuName) }
+          if (d.controlHeadName) { rows.push('- Control head: ' + d.controlHeadName) }
+          if (d.providerId) { rows.push('- Provider: ' + d.providerId) }
+          if (rows.length) {
+            s.properties.autopilotId.description += '\n\n**Detected pilot hardware**\n\n' + rows.join('\n')
+          }
+        }
+      }
+      return s
+    } catch (e) { return baseSchema }
+  }
+
+  // Render markdown in the two field descriptions the schema function augments, so the
+  // detected-device lists show as formatted lists instead of literal ** and - text.
+  plugin.uiSchema = {
+    acModel: { 'ui:options': { enableMarkdownInDescription: true } },
+    autopilotId: { 'ui:options': { enableMarkdownInDescription: true } }
   }
 
   // A SignalK token is a JWT (three dot-separated parts). Ignore anything else

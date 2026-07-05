@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.5.1-alpha.** Sea-trialled on a real rig (B&G Vulcan 7 → SignalK V2
+> **Status: 0.5.2-alpha.** Sea-trialled on a real rig (B&G Vulcan 7 → SignalK V2
 > → Raymarine EV-200) across **several outings in varied conditions**: engaging and
 > holding Auto, ±course nudges, holding Wind, and the abort / failsafe path all
 > worked on the water. **Nav/Track engage and Tack/Gybe have NOT been sea-trialled
@@ -441,8 +441,11 @@ menu ("Navico autopilot bridge"). It draws the live data path — MFD → bridge
 → provider → pilot, with its control head — and shows the current bridge mode, the pilot's
 real state (standby / auto / wind / route-pending / route-engaged), whether a nav
 confirm is pending, whether an autopilot provider is present, and the last button and
-steer result. It is **read-only** (no settings; a link takes you to the plugin config)
-and updates every 2 s.
+steer result. Each node is labelled with the **actual device** resolved off the bus —
+the MFD, the pilot's course computer and actuator, the control head, and the V2 provider
+instance — read from the server's N2K source registry (PGN 60928 + 126996), so you see
+your real hardware, not generic roles. It is **read-only** (no settings; a link takes you
+to the plugin config) and updates every 2 s.
 
 ## Known limitations
 

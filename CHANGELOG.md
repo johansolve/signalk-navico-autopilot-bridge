@@ -4,6 +4,24 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2-alpha] - 2026-07-05
+
+### Added
+- **Device identification.** The status webapp and the plugin-config page now show the
+  **real N2K devices** by name instead of generic roles — the MFD, the pilot's course
+  computer, its actuator control unit, the control head, and the V2 autopilot provider
+  instance — resolved from the server's source registry (PGN 60928 address claim +
+  126996 product info) via a read-only loopback read. No extra bus traffic. On the config
+  page each detected device is woven (as markdown) into the field it relates to — the bound
+  MFD under the AC-model field, and the course computer / actuator / control head / provider
+  as a list under the target-autopilot-id field (refreshed on page load); the webapp updates
+  it live. Resolved names are sticky (a sparse registry read never blanks a known name) and
+  exclude our own emulated AC and commissioning head.
+
+### Fixed
+- Status webapp header showed the old plugin name; both the page title and heading now
+  read **Autopilot — Navico bridge**, and the bundled screenshot is refreshed to match.
+
 ## [0.5.1-alpha] - 2026-07-05
 
 ### Changed
