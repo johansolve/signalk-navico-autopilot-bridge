@@ -29,7 +29,7 @@ module.exports = function (app) {
 
   const plugin = {
     id: 'signalk-navico-autopilot-bridge',
-    name: 'Autopilot — Navico bridge (Simrad AC emulator)',
+    name: 'Autopilot — Navico bridge',
     description:
       'Emulates a Simrad AC12/AC42 autopilot computer so a Navico MFD (B&G ' +
       'Vulcan/Zeus, Simrad, Lowrance) binds to it and sends its autopilot ' +

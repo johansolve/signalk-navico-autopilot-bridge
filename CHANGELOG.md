@@ -4,6 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1-alpha] - 2026-07-05
+
+### Changed
+- Display name is now **Autopilot — Navico bridge** everywhere — both the AppStore
+  listing (`signalk.displayName`) and the Plugin Config entry (`plugin.name`, the
+  `(Simrad AC emulator)` suffix dropped) — so it sorts under Autopilot consistently.
+
 ## [0.5.0-alpha] - 2026-07-05
 
 ### Added
