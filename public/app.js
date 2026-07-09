@@ -51,7 +51,19 @@ const EV_ST = {
 function cls (el, base, extra) { el.className = base + (extra ? ' ' + extra : '') }
 function setV (id, val, k) { const el = $(id); el.textContent = val; el.className = 'v' + (id === 's-v2' ? ' mono' : '') + (k ? ' ' + k : '') }
 
-function setIdent (id, name) { const el = $(id); if (el) { el.textContent = name || '' } }
+// name + bus liveness. presence: online | offline | missing | null (not an N2K device,
+// or no address resolved yet -- then the dot is hidden and only the name shows).
+// 'missing' (never heard since we started) reads as offline too: for the user a
+// powered-down device and one that went quiet are the same thing.
+function setIdent (id, name, presence) {
+  const el = $(id)
+  if (!el) { return }
+  const silent = presence === 'offline' || presence === 'missing'
+  el.classList.toggle('none', !name)
+  el.dataset.pres = name && presence ? (silent ? 'offline' : presence) : ''
+  el.querySelector('.nm').textContent = name || ''
+  el.querySelector('.pres').textContent = silent ? 'offline' : ''
+}
 
 function render (d) {
   const evState = d.evPilotState
@@ -59,11 +71,12 @@ function render (d) {
   const engaged = evState === 'route-engaged'
 
   // resolved device names (from the server's N2K source registry), empty = hidden
-  setIdent('mfd-id', d.mfdName)
-  setIdent('pilot-id', d.pilotName)
-  setIdent('acu-id', d.acuName)
-  setIdent('head-id', d.controlHeadName)
-  setIdent('prov-id', d.noProvider ? '' : ('Signal K autopilot' + (d.providerId ? ' · ' + d.providerId : '')))
+  setIdent('mfd-id', d.mfdName, d.mfdPresence)
+  setIdent('pilot-id', d.pilotName, d.pilotPresence)
+  setIdent('acu-id', d.acuName, d.acuPresence)
+  setIdent('head-id', d.controlHeadName, d.headPresence)
+  // the provider is a SignalK plugin, not a bus device -- no liveness dot
+  setIdent('prov-id', d.noProvider ? '' : ('Signal K autopilot' + (d.providerId ? ' · ' + d.providerId : '')), null)
 
   // bridge node
   const bcls = { 'live': 'st-live', 'dry-run': 'st-dry', 'off': 'st-off' }[d.bridge] || 'st-off'

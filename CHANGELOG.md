@@ -4,9 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.2-alpha] - 2026-07-05
+## [0.5.2-alpha] - 2026-07-09
 
 ### Added
+- **Device liveness.** Every identified device now shows whether it is actually on the bus.
+  Each received CAN frame stamps its source address (no extra traffic, no extra API calls);
+  a device silent for more than 5 s is drawn with a hollow dot and an `offline` badge, on
+  the status webapp and in the plugin-config device list. A Navico plotter claims several
+  addresses and the one that sends the button presses (`130850`) is otherwise quiet for up
+  to 60 s, so liveness pools **all** of the plotter's addresses — its iGPS/Navigator/Display
+  functions chatter continuously. Measured worst-case inter-frame gap for a pooled device is
+  ~1.5 s, hence the 5 s threshold.
+- **AppStore dependencies.** `signalk.recommends` so the plugin page lists the V2 autopilot
+  providers the bridge can be driven through. None is *required*: the bridge only asks
+  `/signalk/v2/api/vessels/self/autopilots` and does not care which provider answers.
 - **Device identification.** The status webapp and the plugin-config page now show the
   **real N2K devices** by name instead of generic roles — the MFD, the pilot's course
   computer, its actuator control unit, the control head, and the V2 autopilot provider
@@ -19,6 +30,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   exclude our own emulated AC and commissioning head.
 
 ### Fixed
+- The MFD name no longer leaks a sub-function suffix (`B & G Vulcan 7 iGPS`): it is taken
+  from the plotter's Display-class address when its command address has not latched yet, and
+  `iGPS` / `Echo (This unit)` / `Pilot Controller` are stripped like `MFD` already was.
 - Status webapp header showed the old plugin name; both the page title and heading now
   read **Autopilot — Navico bridge**, and the bundled screenshot is refreshed to match.
 

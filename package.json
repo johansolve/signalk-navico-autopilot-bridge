@@ -6,7 +6,12 @@
   "signalk": {
     "appIcon": "favicon.svg",
     "displayName": "Autopilot — Navico bridge",
-    "screenshots": ["screenshot.png"]
+    "screenshots": ["screenshot.png"],
+    "recommends": [
+      "@signalk/signalk-autopilot",
+      "pypilot-autopilot-provider",
+      "signalk-autopilot-provider-garmin"
+    ]
   },
   "scripts": {
     "test": "node --test"

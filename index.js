@@ -147,14 +147,18 @@ module.exports = function (app) {
         // run-on text -- the admin UI only renders markdown in field descriptions, not the
         // root/top block. MFD -> the AC-model field (which binds it); pilot chain -> the
         // target-autopilot-id field (which selects the V2 provider that drives it).
+        // A device that is in the source registry but silent on the bus is flagged, so the
+        // list never implies a powered-down plotter is still there. 'missing' (never heard
+        // since start) reads as offline too -- same thing from the user's side.
+        const mark = (name, presence) => name + ((presence === 'offline' || presence === 'missing') ? ' _(offline)_' : '')
         if (d.mfdName && s.properties.acModel) {
-          s.properties.acModel.description += '\n\n**Bound MFD:** ' + d.mfdName
+          s.properties.acModel.description += '\n\n**Bound MFD:** ' + mark(d.mfdName, d.mfdPresence)
         }
         if (s.properties.autopilotId) {
           const rows = []
-          if (d.pilotName) { rows.push('- Course computer: ' + d.pilotName) }
-          if (d.acuName) { rows.push('- Actuator: ' + d.acuName) }
-          if (d.controlHeadName) { rows.push('- Control head: ' + d.controlHeadName) }
+          if (d.pilotName) { rows.push('- Course computer: ' + mark(d.pilotName, d.pilotPresence)) }
+          if (d.acuName) { rows.push('- Actuator: ' + mark(d.acuName, d.acuPresence)) }
+          if (d.controlHeadName) { rows.push('- Control head: ' + mark(d.controlHeadName, d.headPresence)) }
           if (d.providerId) { rows.push('- Provider: ' + d.providerId) }
           if (rows.length) {
             s.properties.autopilotId.description += '\n\n**Detected pilot hardware**\n\n' + rows.join('\n')
