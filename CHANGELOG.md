@@ -4,7 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.2-alpha] - 2026-07-09
+## [0.6.0-beta] - 2026-07-11
+
+**Feature complete — promoted from alpha to beta.** Sea-trialled 2026-07-11: **Tack and
+Gybe both performed exemplarily under way**, the last button manoeuvre left to prove. Auto,
+±course, Wind, the abort/failsafe path and Nav/Track engage are all proven on the water too,
+so every mode and manoeuvre the bridge drives has now been exercised on a real rig (B&G
+Vulcan 7 → SignalK V2 → Raymarine EV-200); only multi-leg waypoint advance along a route
+remains unproven. The changes below carry over from the unreleased 0.5.2-alpha.
 
 ### Added
 - **Device liveness.** Every identified device now shows whether it is actually on the bus.
@@ -92,7 +99,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Decode the Vulcan **Tack/Gybe** button (Simnet `130850` key `0x11`) and drive the
   SK V2 tack endpoint, deriving the turn side from the apparent wind angle (tack into
   the wind, gybe away). Requires the p70's Gybe Inhibit set to *Allow Gybe* to gybe.
-- Sea-trial test protocol (`SEA-TRIAL.md`).
 
 ### Fixed
 - Corrected the `65305` wind status word to `0x0400` (was `0x0406`, an htool guess)

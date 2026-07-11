@@ -2,14 +2,15 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.5.2-alpha.** Sea-trialled on a real rig (B&G Vulcan 7 → SignalK V2
-> → Raymarine EV-200) across **several outings in varied conditions**: engaging and
-> holding Auto, ±course nudges, holding Wind, and the abort / failsafe path all
-> worked on the water. **Nav/Track engage and Tack/Gybe have NOT been sea-trialled
-> yet** — Nav engage from the MFD's own confirm dialog is **dockside-proven**
-> (2026-07-05, drives the pilot into Track without a separate control-head press, see
-> [Nav engage & confirm](#nav-engage--confirm)); Tack/Gybe is decoded but unproven.
-> A bundled [status webapp](#status-webapp) shows the live data path. See
+> **Status: 0.6.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
+> engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
+> all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
+> exemplarily**. Nav/Track engage from the MFD's own confirm dialog — driving the pilot
+> into Track without a separate control-head press — is **proven dockside (2026-07-05) and
+> confirmed under way** (see [Nav engage & confirm](#nav-engage--confirm)); only waypoint
+> advance along a multi-leg route is still unproven. A bundled
+> [status webapp](#status-webapp) shows the live data path. See
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
@@ -26,7 +27,7 @@ non-Navico pilot.** The bridge is Navico/Simrad/B&G-specific on the *input* side
 (only Navico MFDs bind to a Simrad AC) and **provider-agnostic on the output side**
 (anything that implements the SignalK V2 Autopilot API).
 
-![The bundled status webapp showing the live data path from the Navico MFD through the bridge and SignalK to the autopilot, with the pilot engaged in Track.](screenshot.png)
+![The bundled status webapp showing the live data path from the Navico MFD through the bridge and SignalK to the autopilot, with the pilot holding Wind after a Tack and every device live on the bus.](screenshot.png?v=0.6.0-beta)
 
 *The bundled [status webapp](#status-webapp) — a read-only live view that gives a clear
 overview of how the pieces connect and what the pilot is doing. It is a monitor only, with
@@ -69,7 +70,7 @@ one should work but are unverified.
 **An autopilot steers the boat. This software can move the rudder.** Read this
 before you install it.
 
-- **Alpha, experimental, unofficial.** This is a reverse-engineered emulation of
+- **Beta, experimental, unofficial.** This is a reverse-engineered emulation of
   a proprietary Simrad device, built from bus captures — not from any
   manufacturer specification. It is not affiliated with, endorsed by, or
   supported by Navico, B&G, Simrad, Lowrance, Raymarine, or the SignalK project.
@@ -79,8 +80,8 @@ before you install it.
   competent helmsman must remain at the helm, keep a proper lookout, and be ready
   to take manual control and drop the pilot to standby at all times.
 - **It can fail silently or behave unexpectedly** — wrong mode, wrong course,
-  no response, or a course change at the wrong moment. **Nav/Track engage and
-  Tack/Gybe are not proven on the water**, and some MFD display frames are
+  no response, or a course change at the wrong moment. **Waypoint advance along a
+  multi-leg route is not proven on the water**, and some MFD display frames are
   unverified. Do not trust it where a failure could cause a collision, grounding,
   injury, or loss of life.
 - **You are responsible.** By installing or running this software you accept full
@@ -145,7 +146,7 @@ Do the steps below in order:
 Install it from the **SignalK app store**: in the SignalK admin UI open
 **Appstore → Available**, search for *Navico autopilot bridge*, install it, and
 restart the server. It then appears under **Server → Plugin Config** as
-**Autopilot — Navico bridge**. It is published as an **alpha** — read the
+**Autopilot — Navico bridge**. It is published as a **beta** — read the
 [Disclaimer](#disclaimer--no-warranty) first.
 
 `@canboat/canboatjs` is a peerDependency already present in a SignalK server
@@ -355,7 +356,7 @@ wind mode with the pilot engaged, deriving the turn side from the pilot's locked
 wind datum (`65345`) when fresh, else the live apparent wind, and mapping to
 `POST tack/{port|starboard}` — the pilot mirrors the wind angle to the other side (a
 tack when the wind is forward, a gybe when aft). **Requires the pilot's *Gybe Inhibit*
-set to *Allow Gybe*** to gybe. Not sea-trialled. Byte layout in
+set to *Allow Gybe*** to gybe. Sea-trialled 2026-07-11. Byte layout in
 [PROTOCOL-REFERENCE §2.4](PROTOCOL-REFERENCE.md).
 
 ### Mode display (firehose)
@@ -405,18 +406,21 @@ the boat.
   head frees the helm immediately**, and standby from the MFD drops the pilot.
 - **±1° / ±10°** nudges alter heading by the right amount and direction; a
   cumulative ~60° alteration came round without an accidental tack.
-- **Wind** engaged and **held the apparent wind angle**, overlay showed *Wind* —
-  but see the Tack limitation below.
+- **Wind** engaged and **held the apparent wind angle**, overlay showed *Wind*.
+- **Tack and Gybe** (2026-07-11) both fired from the MFD and the pilot came round
+  cleanly to the mirrored wind angle on either side — performed exemplarily under way.
+- **Nav/Track engage** from the MFD's own confirm dialog drove the pilot into Track
+  under way, without a separate control-head press (also dockside-proven 2026-07-05).
 
-> **Not sea-trialled yet: Nav/Track engage and Tack/Gybe.** Nav/Track engage from the
-> MFD is **dockside-proven** (2026-07-05) but not tested under way; Tack/Gybe is
-> decoded but unproven. Verify both on the water before relying on them.
+> **Not proven under way yet: waypoint advance along a multi-leg route.** Nav/Track
+> *engage* is confirmed on the water; advancing through the legs of a route is not.
+> Verify it before relying on it.
 
 ## Nav engage & confirm
 
 Engaging Nav is a **two-press** flow, so the MFD raises its own confirm dialog and
 the confirmation on the MFD engages the pilot — **no separate press on the pilot's own
-control head** (dockside-proven 2026-07-05):
+control head** (dockside-proven 2026-07-05, and confirmed under way):
 
 1. **Press Nav** on the MFD. The bridge arms the confirm window and puts the pilot
    into route: the pilot goes to **Track-pending** and the MFD raises its *engage
@@ -449,14 +453,8 @@ to the plugin config) and updates every 2 s.
 
 ## Known limitations
 
-This is an alpha; these are open:
+This is a beta; these are open:
 
-- **Tack/Gybe is not sea-trialled.** The pilot holds Wind on the water and the
-  commanded wind angle is now reported on the MFD (`65341` field `0x03`, pinned from a
-  NAC-3 ground-truth capture); Tack is enabled and its turn side is derived from the
-  pilot's locked wind datum (`65345`, which SK core already maps). But the maneuver
-  itself has not been performed under way. Gybing needs the pilot's *Gybe Inhibit*
-  set to *Allow Gybe*.
 - **Some display frames are still guesses.** The `65340`/`65302` per-mode frames are
   htool guesses (a real NAC-3 emits neither). If one is wrong the pilot is still in the
   correct mode (confirm on its own head); only the Navico MFD's mode label could be off.
@@ -465,9 +463,10 @@ This is an alpha; these are open:
   backing pilot: the pilot applies the equivalent cross-track compensation in its
   course-hold modes anyway.
 - **Not every condition or pilot is covered.** Auto, ±course, Wind and the abort path
-  are proven on the water across several outings in varied conditions, but holding
-  quality in the strongest wind and sea, and waypoint advance along a multi-leg route,
-  are not yet proven — and behaviour may differ on other backing pilots.
+  are proven on the water across several outings in varied conditions, Tack/Gybe on one
+  (2026-07-11), and Nav/Track engage under way; but holding quality in the strongest wind
+  and sea, and waypoint advance along a multi-leg route, are not yet proven — and
+  behaviour may differ on other backing pilots.
 - **Output is via loopback HTTP** with a configured token. An in-process V2 call
   would remove the token requirement but there is no clean documented path for a
   non-provider plugin to set V2 state; this is a candidate for a later version.
