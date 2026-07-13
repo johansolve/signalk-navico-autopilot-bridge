@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.6.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.6.1-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed

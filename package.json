@@ -14,7 +14,10 @@
     ]
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test --test-force-exit"
+  },
+  "devDependencies": {
+    "@canboat/canboatjs": "^3.20.0"
   },
   "keywords": [
     "signalk-node-server-plugin",
