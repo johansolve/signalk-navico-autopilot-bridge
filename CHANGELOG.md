@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1-beta] - 2026-07-13
+
+### Fixed
+- **Load failure on canboatjs 3.x.** The plugin required the peer dependency's internal
+  `@canboat/canboatjs/lib/fromPgnStream` subpath, which canboatjs 3.x moved to `dist/` when
+  it was rewritten in TypeScript. On a host server bundling canboatjs 3.x (e.g. the current
+  Docker image) the plugin failed to start with `Cannot find module
+  '@canboat/canboatjs/lib/fromPgnStream'`. It now builds the PGN parse stream on top of the
+  public root export `FromPgn`, which both canboatjs 2.x and 3.x expose, so it is
+  independent of the peer's internal file layout. Reported from a Docker install.
+
 ## [0.6.0-beta] - 2026-07-11
 
 **Feature complete — promoted from alpha to beta.** Sea-trialled 2026-07-11: **Tack and
