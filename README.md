@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.6.1-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.6.2-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
@@ -415,6 +415,11 @@ the boat.
 > **Not proven under way yet: waypoint advance along a multi-leg route.** Nav/Track
 > *engage* is confirmed on the water; advancing through the legs of a route is not.
 > Verify it before relying on it.
+>
+> **Wind-mode course nudge on port tack is not confirmed under way.** The nudge
+> direction in wind vane mode was corrected (green `+` turns to starboard on both
+> tacks) and verified dockside on starboard tack; the port-tack case is still to be
+> checked on the water.
 
 ## Nav engage & confirm
 
@@ -425,9 +430,10 @@ control head** (dockside-proven 2026-07-05, and confirmed under way):
 1. **Press Nav** on the MFD. The bridge arms the confirm window and puts the pilot
    into route: the pilot goes to **Track-pending** and the MFD raises its *engage
    nav?* dialog. (The pilot beeps here — it is waiting for confirmation.)
-2. **Confirm on the MFD** (its OK sends a second Nav). The bridge fires the engage and
-   the pilot latches **Track-engaged** — the same thing its own control head's Track
-   confirm does.
+2. **Confirm on the MFD.** The dialog's OK sends the confirm key (`0x10`); the bridge fires
+   the engage and the pilot latches **Track-engaged** — the same thing its own control head's
+   Track confirm does. (A second **Nav** press confirms too.) This works whatever mode you
+   engaged Nav from, **including from Wind** (dockside-proven 2026-07-14).
 
 Under the hood the engage uses the SignalK **V1 `steering.autopilot.actions.advanceWaypoint`**
 action (it emits the Raymarine Track-to-waypoint command, `65379 → 0x0181`). It does

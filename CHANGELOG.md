@@ -4,6 +4,29 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2-beta] - 2026-07-14
+
+### Fixed
+- **Regression: course nudges dead in both Auto and Wind, and every device shown offline**, after
+  a host canboatjs upgrade. canboatjs' `Canbus.pipe()` switches the bus stream to Actisense **text**
+  when the destination lacks a `.fromPgn` marker. The plugin's own parse stream had no such
+  marker, so the bus emitted strings instead of frame objects; the PGN parser accepts both (so
+  mode/tack/wind kept working) but the raw-frame tap expects an object and silently no-oped —
+  which left the ChangeCourse magnitude undecoded (nudges rejected) and the device-liveness
+  timestamps unset (every device drawn offline). The parse stream now exposes `.fromPgn`, exactly
+  as canboatjs' own `fromPgnStream` does, keeping the bus in object mode.
+- **Wind-mode course nudge turned the wrong way on starboard tack.** In the pilot's wind-vane
+  mode the Seatalk +/- keystroke nudges the wind angle by magnitude (bear away), whose physical
+  port/starboard sense depends on the tack, so a green `+` fell off to port on starboard tack
+  instead of luffing to starboard. The nudge sign is now inverted on starboard tack so green `+`
+  turns the boat to starboard on both tacks. Verified dockside on starboard tack; port tack still
+  to be confirmed under way.
+- **Nav/Track engage from Wind reverted to Wind on the MFD confirm.** The MFD's engage-nav dialog
+  sends confirm key `0x10`, not a second Nav key as previously assumed; it was unhandled, so
+  confirming did nothing and only a second Nav press engaged. The bridge now treats `0x10` as the
+  confirm (inside the confirm window only), so a single **Nav → OK** on the MFD engages Track,
+  including from Wind. Verified dockside.
+
 ## [0.6.1-beta] - 2026-07-13
 
 ### Fixed
