@@ -2,14 +2,15 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.6.2-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.7.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
 > exemplarily**. Nav/Track engage from the MFD's own confirm dialog — driving the pilot
 > into Track without a separate control-head press — is **proven dockside (2026-07-05) and
-> confirmed under way** (see [Nav engage & confirm](#nav-engage--confirm)); only waypoint
-> advance along a multi-leg route is still unproven. A bundled
+> confirmed under way**. **Multi-leg route sailing including waypoint advance was
+> sea-trialled 2026-07-15**, with optional [automatic advance](#nav-engage--confirm) of
+> small course changes. A bundled
 > [status webapp](#status-webapp) shows the live data path. See
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
@@ -80,10 +81,11 @@ before you install it.
   competent helmsman must remain at the helm, keep a proper lookout, and be ready
   to take manual control and drop the pilot to standby at all times.
 - **It can fail silently or behave unexpectedly** — wrong mode, wrong course,
-  no response, or a course change at the wrong moment. **Waypoint advance along a
-  multi-leg route is not proven on the water**, and some MFD display frames are
-  unverified. Do not trust it where a failure could cause a collision, grounding,
-  injury, or loss of life.
+  no response, or a course change at the wrong moment. **Automatic waypoint advance,
+  if you enable it, confirms course changes on its own** — keep it within a limit you
+  are comfortable with and watch each advance. Some MFD display frames are unverified.
+  Do not trust it where a failure could cause a collision, grounding, injury, or loss
+  of life.
 - **You are responsible.** By installing or running this software you accept full
   responsibility for any consequences. Only ever use it with the **boat secured,
   the engine off, and the pilot's own control head to hand**, until you have
@@ -411,11 +413,10 @@ the boat.
   cleanly to the mirrored wind angle on either side — performed exemplarily under way.
 - **Nav/Track engage** from the MFD's own confirm dialog drove the pilot into Track
   under way, without a separate control-head press (also dockside-proven 2026-07-05).
+- **Multi-leg route sailing including waypoint advance** was sea-trialled 2026-07-15;
+  with [automatic advance](#nav-engage--confirm) enabled a 7° advance was auto-confirmed
+  (pilot engaged in ~70 ms, unnoticed) and a 21° advance was left for a manual confirm.
 
-> **Not proven under way yet: waypoint advance along a multi-leg route.** Nav/Track
-> *engage* is confirmed on the water; advancing through the legs of a route is not.
-> Verify it before relying on it.
->
 > **Wind-mode course nudge on port tack is not confirmed under way.** The nudge
 > direction in wind vane mode was corrected (green `+` turns to starboard on both
 > tacks) and verified dockside on starboard tack; the port-tack case is still to be
@@ -444,6 +445,17 @@ the two apart — so the MFD dialog clears exactly when the pilot really engages
 control-head confirm (if you use it instead) clears it too. Requires the pilot to have accepted
 route first; if it hasn't, the engage is safely rejected rather than fired blind.
 
+### Automatic waypoint advance (opt-in)
+
+At each waypoint of a route the pilot enters Track-pending again and waits for the same
+confirm. Set **Auto-confirm Track waypoint advance up to (degrees)** above 0 and the bridge
+confirms that automatically when the course change to the next leg is within the limit — so
+small turns sail through with no control-head press. The turn is measured from
+`navigation.courseGreatCircle.bearingTrackTrue` (the server's decode of the plotter's route
+data) at the instant the pilot goes pending; if it cannot be measured with confidence the
+advance is left for a manual confirm, and it is never confirmed against an already-engaged
+pilot. Off by default; larger turns always fall through to a manual confirm on the control head.
+
 ## Status webapp
 
 The plugin bundles a small **status webapp** — open it from the SignalK **Webapps**
@@ -470,9 +482,9 @@ This is a beta; these are open:
   course-hold modes anyway.
 - **Not every condition or pilot is covered.** Auto, ±course, Wind and the abort path
   are proven on the water across several outings in varied conditions, Tack/Gybe on one
-  (2026-07-11), and Nav/Track engage under way; but holding quality in the strongest wind
-  and sea, and waypoint advance along a multi-leg route, are not yet proven — and
-  behaviour may differ on other backing pilots.
+  (2026-07-11), and Nav/Track engage plus multi-leg route sailing with waypoint advance
+  under way (2026-07-15); but holding quality in the strongest wind and sea is not yet
+  fully characterised — and behaviour may differ on other backing pilots.
 - **Output is via loopback HTTP** with a configured token. An in-process V2 call
   would remove the token requirement but there is no clean documented path for a
   non-provider plugin to set V2 state; this is a candidate for a later version.

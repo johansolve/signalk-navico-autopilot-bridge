@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0-beta] - 2026-07-15
+
+### Added
+- **Automatic waypoint advance for small course changes (opt-in).** In Track mode the
+  Raymarine pilot enters Track-pending at each waypoint and waits for a confirm (normally a
+  control-head Yes). When the new option **Auto-confirm Track waypoint advance up to (degrees)**
+  is set above 0, the bridge measures the course change to the next leg — from
+  `navigation.courseGreatCircle.bearingTrackTrue`, the server's decode of the plotter's
+  route data — and confirms the advance automatically when the turn is within the limit, so
+  small turns need no control-head press. Larger turns are left for a manual confirm. Off by
+  default (0); requires Bridge mode = live. The measurement is gated so an unmeasurable or
+  stale turn always falls back to manual, and it never fires against an already-engaged pilot.
+  Sea-trialled 2026-07-15: a 7° advance auto-confirmed (pilot engaged in ~70 ms, unnoticed);
+  a 21° advance was correctly left for a manual confirm. This closes the last unproven item
+  (multi-leg waypoint advance).
+
 ## [0.6.2-beta] - 2026-07-14
 
 ### Fixed

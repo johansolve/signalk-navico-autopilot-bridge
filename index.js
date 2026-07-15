@@ -129,6 +129,17 @@ module.exports = function (app) {
         description: 'Source address the emulated control head claims (only used ' +
           'when commissioning mode is on).',
         default: 44
+      },
+      autoAdvanceMaxDeg: {
+        type: 'number',
+        title: 'Auto-confirm Track waypoint advance up to (degrees; 0 = off)',
+        description: 'In Track mode, when the pilot asks to confirm a waypoint advance ' +
+          '(it enters Track-pending and normally waits for a control-head Yes), ' +
+          'automatically confirm it when the course change to the next leg is at most ' +
+          'this many degrees — so small turns need no control-head press. Larger turns ' +
+          'are left for a manual confirm. 0 disables it (every advance is manual). ' +
+          'Requires Bridge mode = live; set deliberately.',
+        default: 0
       }
     }
   }
