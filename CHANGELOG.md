@@ -4,6 +4,44 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1-beta] - 2026-07-22
+
+### Added
+- **The MFD's No Drift button now engages the pilot** instead of being logged and dropped.
+  Key `0x0c` had been carried as a guess since the first capture; it was confirmed dockside
+  2026-07-22 from the bridge's own diagnostic log, sent with the same key-press envelope and
+  frame layout as Auto and Wind. It maps to plain **auto**: Raymarine's No Drift is a
+  COG-referenced heading hold, but nothing in the SignalK chain can ask for it —
+  `SeatalkPilotMode16` `0x0181` ("No Drift, COG referenced") is decoded to `route` by
+  `@signalk/n2k-signalk`, and `signalk-autopilot` already uses that same `0x0181` as its
+  waypoint advance, so firing No Drift would mean sending track-engage. The pilot holds a
+  heading, it just does not compensate for drift. Verified dockside: both the MFD and the
+  control head report Auto after the press, so button and display stay consistent.
+- **`lastV2Call` and `apRawRing` in the status API.** The last autopilot request now sits
+  next to its result, instead of the status showing an answer with no question; and the
+  ring of recent autopilot-group frames — byte-exact, newest last — is exposed for
+  reconstructing a button sequence after the fact, where `lastRawHex` only survives until
+  the next frame. Both were already tracked internally and simply never surfaced. The ring
+  is filtered to the autopilot group: the bus streams other 130850 groups continuously and
+  would otherwise rotate a button press out within seconds.
+
+### Changed
+- **Stopped sending the `65340` and `65302` state frames.** Both per-mode tables came from
+  htool's reverse engineering (the route rows were explicitly guesses) and a real NAC-3 emits
+  neither PGN. A dockside test 2026-07-22 suppressed both: the MFD still bound and the mode
+  label still tracked every state change, so the guesses were dropped rather than shipped.
+  `TX_PGNS` still declares both, as a real AC does — only the transmission is gone.
+
+### Removed
+- **The `Route diagnostic log path` option.** It was a temporary passive capture added to
+  solve waypoint advance, which it did (and it also confirmed the No Drift key above). It
+  reached npm in 0.7.0-beta only because `npm publish` packages the working tree; it was never
+  in the tagged source. Inert unless a path was set.
+- **Three dead state counters** (`txCounts`, `commissionReads`, `missingKeys`). All three
+  were written on every send, commissioning read or missing key and then never read by
+  anything — not the status endpoint, not the webapp. The information that mattered is
+  already covered elsewhere (`cmdCount` for traffic, a debug line for each missing key).
+
 ## [0.7.0-beta] - 2026-07-15
 
 ### Added

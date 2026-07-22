@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.7.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.7.1-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
@@ -102,9 +102,11 @@ state/telemetry PGNs (`65340` Pilot State, `65305` Device Status, `65341` AP
 Angle, `65302`/`65420`/`130860`/`128275`, …) at 1–2 Hz. A near-silent fake is
 ranked below a live pilot and never selected, and the commissioning "press
 standby" gate is satisfied by the AC's *own* continuous state broadcast. This
-plugin reproduces that broadcast faithfully (byte templates taken verbatim from a
-real AC42 in `canboat/samples/ac42-commissioning.raw`), which is what makes the
-MFD bind to it and unlock the control view.
+plugin reproduces that broadcast (byte templates taken verbatim from a real AC42 in
+`canboat/samples/ac42-commissioning.raw`), which is what makes the MFD bind to it and
+unlock the control view. Not every frame a real AC42 sends turned out to be needed:
+`65340` and `65302` were dropped in testing without costing the binding or the mode
+display, so the emitted set is the *verified* subset, not the full one.
 
 The emulator runs as a **second N2K device** on the bus (its own address claim,
 default address 35), alongside the SignalK server's own canboat connection and any
@@ -341,7 +343,7 @@ canboat's mislabeled `Event` field. Keys verified live against the MFD:
 | `0x0a` | Nav / Track | `PUT state {route}` (two-press engage, see [Nav engage & confirm](#nav-engage--confirm)) |
 | `0x1a` | ChangeCourse | `PUT target/adjust` (±1° / ±10°) |
 | `0x11` | Tack / Gybe | `POST tack/{port\|starboard}` (wind mode only) |
-| `0x0c` | No Drift | decoded, not fired (no V2 state) |
+| `0x0c` | No Drift | `PUT state {auto}` (see [Known limitations](#known-limitations)) |
 | `0x1c` | key-press envelope | ignored (precedes every command) |
 
 **ChangeCourse** (`0x1a`): byte 8 = direction (`0x03` starboard/+, `0x02`
@@ -364,11 +366,12 @@ set to *Allow Gybe*** to gybe. Sea-trialled 2026-07-11. Byte layout in
 ### Mode display (firehose)
 
 The MFD's displayed mode is driven by the firehose, not by the button press: the
-plugin sends per-mode `65305`/`65340`/`65302` frames plus a mode-change announce, and
-the overlay followed standby/auto/wind/route correctly on the sea trials. The
-`65305` and `65341` frames for auto/wind/route are now pinned to real NAC-3 captures
-(ground truth); the `65340`/`65302` frames remain htool guesses (a real NAC-3 emits
-neither). Per-mode byte values and source tags are in
+plugin sends per-mode `65305` frames plus a mode-change announce, and the overlay
+followed standby/auto/wind/route correctly on the sea trials. The `65305` and `65341`
+frames for auto/wind/route are pinned to real NAC-3 captures (ground truth). The
+`65340`/`65302` frames were htool guesses and are **no longer sent** — a dockside test
+(2026-07-22) confirmed the MFD binds and the mode label still tracks every state change
+without them. Per-mode byte values and source tags are in
 [PROTOCOL-REFERENCE §3](PROTOCOL-REFERENCE.md).
 
 ### Set heading (127237)
@@ -473,21 +476,25 @@ to the plugin config) and updates every 2 s.
 
 This is a beta; these are open:
 
-- **Some display frames are still guesses.** The `65340`/`65302` per-mode frames are
-  htool guesses (a real NAC-3 emits neither). If one is wrong the pilot is still in the
-  correct mode (confirm on its own head); only the Navico MFD's mode label could be off.
-- **No Drift (`0x0c`) has no V2 equivalent** — the V2 states are only
-  standby/auto/wind/route, so it is logged, never fired. Harmless with a Raymarine
-  backing pilot: the pilot applies the equivalent cross-track compensation in its
-  course-hold modes anyway.
+- **No Drift maps to plain auto.** Raymarine's No Drift is a COG-referenced heading
+  hold — where Auto holds a compass heading and lets leeway and current push the boat
+  off the ground track — but nothing in the SignalK chain can ask for it:
+  `SeatalkPilotMode16` `0x0181` ("No Drift, COG referenced") is decoded to `route` by
+  `@signalk/n2k-signalk`, and `signalk-autopilot` already uses that same `0x0181` as its
+  waypoint advance. So the button engages auto: the pilot holds a heading, it just does
+  not compensate for drift.
 - **Not every condition or pilot is covered.** Auto, ±course, Wind and the abort path
   are proven on the water across several outings in varied conditions, Tack/Gybe on one
   (2026-07-11), and Nav/Track engage plus multi-leg route sailing with waypoint advance
-  under way (2026-07-15); but holding quality in the strongest wind and sea is not yet
-  fully characterised — and behaviour may differ on other backing pilots.
-- **Output is via loopback HTTP** with a configured token. An in-process V2 call
-  would remove the token requirement but there is no clean documented path for a
-  non-provider plugin to set V2 state; this is a candidate for a later version.
+  under way (2026-07-15) — but behaviour may differ on other backing pilots. (How well
+  the pilot *holds* a course is the pilot's own business; the bridge only commands the
+  mode.)
+- **Output is via loopback HTTP** with a configured token. There is no in-process
+  **V2** path for a non-provider plugin: the whole command surface lives inside the
+  server's express handlers, and `app.autopilotApi` exposes only provider registration.
+  (SignalK's V1 PUT API is reachable in-process and would reach the same provider
+  handlers without a token, but only because a plugin PUT bypasses the security check —
+  the bridge does not take that route.)
 
 ## Scope
 

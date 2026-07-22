@@ -76,14 +76,26 @@ b8..b11   FF     (mode commands carry no payload)
 | `0x0f` | Wind | `PUT /state {wind}` | yes | `sea-trial` `nac3-nav` |
 | `0x11` | Tack/Gybe | derive side from AWA → `POST /tack/{dir}` | yes (wind, engaged) | `sea-trial` |
 | `0x1a` | ChangeCourse | ±angle → `PUT /target/adjust` | yes | `sea-trial` `nac3-nav` |
-| `0x0c` | NoDrift | — (no V2 state) | log-only | decoded, unfired |
+| `0x0c` | NoDrift | `PUT /state {auto}` | yes | dockside 2026-07-22 |
+| `0x10` | Nav confirm (MFD Yes) | `advanceWaypoint` (only while nav-pending) | yes | dockside 2026-07-14 |
 | `0x1c` | key-press envelope | — (precedes every command) | ignored | `sea-trial` |
-| `0x10` | *(unknown one-off)* | — | log-only | `nac3-nav` (1 sample) |
 | `0x2b` | *(bus mode-change announce)* | — (broadcast, not to the AC) | ignored | `nac3-nav` |
 
 Notes:
-- `0x10` appeared once, from a second head during a *failed* nav-from-wind attempt,
-  and drove no AP state change. Undecodable from one sample — do not act on it.
+- `0x0c` was long carried as a guess (logged, never fired). Confirmed 2026-07-22 from
+  the bridge's own diagnostic log: the Vulcan sent it with the same `0x1c` envelope and
+  the same frame layout as Auto and Wind, in a sequence with both. It maps to plain
+  **auto**, not to a No Drift mode of its own: Raymarine's No Drift is a COG-referenced
+  heading hold, but `SeatalkPilotMode16` `0x0181` ("No Drift, COG referenced") is
+  decoded to `route` by `@signalk/n2k-signalk`, and `signalk-autopilot` already uses
+  that same `0x0181` as its `advanceWaypoint` — so firing No Drift would mean sending
+  track-engage. Auto is the honest approximation: the pilot holds a heading, it just
+  does not compensate for drift. Confirmed dockside the same day: pressing No Drift
+  engages the pilot, and **both** the MFD and the p70s report Auto — the plotter does
+  not latch a No Drift label of its own, so button and display stay consistent.
+- `0x10` was first seen as a single undecodable sample from a second head. It is the
+  **MFD's nav-confirm Yes**, proven dockside 2026-07-14: one press takes the pilot from
+  Track-pending (`0x0180`) to Track-engaged (`0x0181`). It only fires while nav-pending.
 - `0x2b` is emitted **broadcast** (b2=`0xFF`, b4=`0x64`) right after each mode
   change — a bus-wide announce, not a command directed at the AC.
 
@@ -192,14 +204,23 @@ Selector-`0x0a` status word is a per-mode bitfield — ground truth `nac3-wind` 
   (`41,9f,00,1d,81,00,00,00` / `…80…`) that drives the MFD's displayed mode label.
   `htool-guess`
 
-### 3.3 PGN 65340 / 65302 — pilot state (1 Hz)
+### 3.3 PGN 65340 / 65302 — pilot state — NOT SENT (dropped 2026-07-22)
 
 > **The NAC-3 emits neither 65340 nor 65302, in any mode** (`nac3-nav`: zero
 > frames from any source). The **AC42 does emit 65340** (`ac42-comm`), which is why
-> the bridge — emulating an AC42 — still sends both. If the Nav-view crash survives
-> the 65341 fix, **suppressing 65340/65302 is the next candidate.**
+> the bridge — emulating an AC42 — used to send both, at 1 Hz.
+>
+> **Dockside test 2026-07-22: both suppressed. The MFD still bound, and the mode
+> label still tracked every state change (standby → auto → wind → nav).** So the
+> frames earned nothing — most of the table below was `htool-guess` — and the bridge
+> no longer sends them. `TX_PGNS` still *declares* both, as a real AC does; only the
+> transmission is gone, which keeps the declared capability list untouched (the test
+> deliberately changed one variable, so a binding failure would have pointed at the
+> declared list rather than at the frames).
+>
+> The tables are kept below as reverse-engineering reference, not as bridge output.
 
-65340 Pilot State (bridge constants):
+65340 Pilot State (former bridge constants):
 
 | mode | frame | source |
 |---|---|---|
@@ -208,7 +229,7 @@ Selector-`0x0a` status word is a per-mode bitfield — ground truth `nac3-wind` 
 | wind | `41 9f 10 03 fe fa 00 80` | `htool-guess` |
 | route | `41 9f 10 06 fe f8 00 80` | `htool-guess` |
 
-65302 (bridge constants, all effectively `htool-guess`): standby
+65302 (former bridge constants, all effectively `htool-guess`): standby
 `41 9f 0a 6b 00 00 00 ff`, auto `41 9f 0a 69 00 00 28 ff`, wind
 `41 9f 0a 69 00 00 30 ff`, route `41 9f 0a 6b 00 00 28 ff`.
 
