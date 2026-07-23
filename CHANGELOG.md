@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2-beta] - 2026-07-23
+
+### Fixed
+- **Wind-mode course nudge was inverted on port tack.** In the EV's wind-vane mode a
+  native `+` keystroke turns the boat to port on **both** tacks (it reads as bearing away
+  on starboard and luffing on port, but it is the same bow-to-port turn either way), so
+  the Vulcan's `+` — which always means "nudge to starboard" — must be inverted throughout
+  wind mode. The previous release inverted only on starboard tack, leaving port tack
+  turning the wrong way. A dockside test could only ever exercise starboard, where both
+  the old and the new logic behave identically; port tack needed the water to tell them
+  apart. Both tacks confirmed on the water. The nudge branch no longer reads the wind
+  angle at all.
+
 ## [0.7.1-beta] - 2026-07-22
 
 ### Added
