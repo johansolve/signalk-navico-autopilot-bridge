@@ -64,7 +64,7 @@ test('ignores the plugin own commissioning head instead of steering on it', () =
   // control-head.js broadcasts a real AP-group standby every 2 s to hold the MFD's
   // commissioning gate open, from headAddress -- which onParsedPgn does not filter
   // (it only excludes the AC's own address). Decoding it as a press would drop the
-  // pilot to standby twice a second for as long as commissioning mode is on.
+  // pilot to standby every other second for as long as commissioning mode is on.
   const ac = new ACEmulator({ debug () {} }, {
     bridge: 'dry-run', enableCommissioningHead: true, headAddress: 44
   })
@@ -75,6 +75,43 @@ test('ignores the plugin own commissioning head instead of steering on it', () =
   assert.strictEqual(ac.state.lastMappedEvent, 'own-src Standby (ignored)')
   assert.deepStrictEqual(calls, [])
   assert.strictEqual(ac.mfdSrc, null)
+})
+
+test('answers the commissioning readback under both canboat field spellings', () => {
+  // No raw tap exists for 130845, so this one is read by field name -- which canboat
+  // renders camelCase (useCamel, the default) or Title Case. Reading only the latter
+  // meant the MFD's dockside reads went unanswered on a 3.x host and its wizard stayed
+  // on "commissioning required".
+  for (const fields of [{ address: 35, key: 20 }, { Address: 35, Key: 20 }]) {
+    const ac = new ACEmulator({ debug () {} }, { bridge: 'dry-run', preferredAddress: 35 })
+    const sent = []
+    ac.myAddr = () => 35
+    ac.canbus = { sendPGN: (s) => sent.push(s) }
+    ac.onParsedPgn({ pgn: 130845, src: 7, fields })
+    assert.strictEqual(sent.length, 1, `no reply for ${JSON.stringify(fields)}`)
+    assert.match(sent[0], /,130845,/)
+  }
+})
+
+test('does not answer a commissioning read addressed to another device', () => {
+  // A real AC on the same bus must keep its own dockside config: answering reads
+  // aimed at it would feed the MFD our canned values for someone else's autopilot.
+  const ac = new ACEmulator({ debug () {} }, { bridge: 'dry-run', preferredAddress: 35 })
+  const sent = []
+  ac.myAddr = () => 35
+  ac.canbus = { sendPGN: (s) => sent.push(s) }
+  ac.onParsedPgn({ pgn: 130845, src: 7, fields: { address: 36, key: 20 } })
+  assert.deepStrictEqual(sent, [])
+})
+
+test('caches the pilot wind datum under both canboat field spellings', () => {
+  // 65345 carries the pilot's LOCKED apparent wind angle. Read under one spelling
+  // only, it never cached on a 3.x host and tack/gybe fell back to live AWA.
+  for (const fields of [{ windDatum: 1.5 }, { 'Wind Datum': 1.5 }]) {
+    const ac = emulator()
+    ac.onParsedPgn({ pgn: 65345, src: 204, fields })
+    assert.strictEqual(ac.windDatumRad, 1.5, `not cached from ${JSON.stringify(fields)}`)
+  }
 })
 
 test('does not pair a parsed PGN with another source raw frame', () => {

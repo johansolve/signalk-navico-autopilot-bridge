@@ -19,12 +19,25 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failure. Both group and key now come from the raw frame the plugin already
   reassembles, guarded on source and age, with the canboat fields kept as a fallback.
   Reported from an install that had picked up canboatjs 3.x.
+- **The pilot's locked wind angle was ignored on canboatjs 3.x**, for the same
+  field-spelling reason: `65345` was read as `Wind Datum` only, so `windDatumRad` never
+  cached. Tack and gybe then derived their turn side from the fluctuating live apparent
+  wind instead of the pilot's setpoint — the exact jitter the cache exists to avoid,
+  which can flip the chosen side near ±90° — and the `65341` echo showed live AWA
+  rather than the locked angle.
+- **The commissioning readback went unanswered on canboatjs 3.x**, so an MFD's wizard
+  could sit on *commissioning required* while every other value on the page was live.
+  `130845` is read by field name (it has no raw tap), and only the Title Case spelling
+  was checked — canboat renders field names camelCase when `useCamel` is on, which is
+  the default our parser runs with, and 2.x only ever produced Title Case. Both
+  spellings are now accepted. Reported from a Triton² that would not clear its
+  commissioning banner.
 - **The plugin's own commissioning head steered the pilot.** With commissioning mode
   enabled the emulated control head broadcasts a real AP-group `130850` standby every
   2 s to hold the MFD's gate open, from its own address — which the incoming filter did
   not exclude (it only skipped the AC's address). In `live` that decoded as a genuine
-  press and dropped the pilot to standby twice a second for as long as commissioning
-  mode was on, so it could never stay engaged. Own addresses are now rejected before
+  press and dropped the pilot to standby every other second for as long as
+  commissioning mode was on, so it could never stay engaged. Own addresses are now rejected before
   any command is applied, and shown as *own-src … (ignored)* rather than silently, since
   seeing the head's own traffic recognised is useful while commissioning. Found by a
   user who ran with the commissioning head enabled.
@@ -36,7 +49,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   globally installed server tree. Startup died with `Cannot find module
   '@canboat/canboatjs'`. Resolution now falls back to a require rooted at the server's
   entry file, which reaches the copy the server bundles. Safe on either major, since
-  the decode no longer depends on canboat field naming. If both paths fail the plugin
+  the button decode reads raw bytes and the remaining field reads accept both canboat
+  spellings. If both paths fail the plugin
   status now says so and gives the install command instead of showing a bare module
   error.
 
