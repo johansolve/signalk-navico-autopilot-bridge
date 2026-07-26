@@ -19,6 +19,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failure. Both group and key now come from the raw frame the plugin already
   reassembles, guarded on source and age, with the canboat fields kept as a fallback.
   Reported from an install that had picked up canboatjs 3.x.
+- **The plugin's own commissioning head steered the pilot.** With commissioning mode
+  enabled the emulated control head broadcasts a real AP-group `130850` standby every
+  2 s to hold the MFD's gate open, from its own address — which the incoming filter did
+  not exclude (it only skipped the AC's address). In `live` that decoded as a genuine
+  press and dropped the pilot to standby twice a second for as long as commissioning
+  mode was on, so it could never stay engaged. Own addresses are now rejected before
+  any command is applied, and shown as *own-src … (ignored)* rather than silently, since
+  seeing the head's own traffic recognised is useful while commissioning. Found by a
+  user who ran with the commissioning head enabled.
 - **A fresh install could not find canboatjs at all.** It is an optional
   peerDependency (npm does not auto-install it — the appstore's plugin-ci runs
   `--ignore-scripts` and fails on native addons, which canboatjs pulls in via

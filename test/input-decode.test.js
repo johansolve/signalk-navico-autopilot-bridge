@@ -60,6 +60,23 @@ test('ignores a non-AP group', () => {
   assert.strictEqual(ac.state.lastMappedEvent, 'non-AP-group (ignored)')
 })
 
+test('ignores the plugin own commissioning head instead of steering on it', () => {
+  // control-head.js broadcasts a real AP-group standby every 2 s to hold the MFD's
+  // commissioning gate open, from headAddress -- which onParsedPgn does not filter
+  // (it only excludes the AC's own address). Decoding it as a press would drop the
+  // pilot to standby twice a second for as long as commissioning mode is on.
+  const ac = new ACEmulator({ debug () {} }, {
+    bridge: 'dry-run', enableCommissioningHead: true, headAddress: 44
+  })
+  const calls = []
+  ac.applyV2 = (desc) => calls.push(desc)
+  press(ac, 0x06, 44)
+  ac.handleIncomingAP({ pgn: 130850, src: 44, fields: {} })
+  assert.strictEqual(ac.state.lastMappedEvent, 'own-src Standby (ignored)')
+  assert.deepStrictEqual(calls, [])
+  assert.strictEqual(ac.mfdSrc, null)
+})
+
 test('does not pair a parsed PGN with another source raw frame', () => {
   const ac = emulator()
   press(ac, 0x06, 7)
