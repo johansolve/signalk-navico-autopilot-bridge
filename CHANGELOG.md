@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3-beta] - 2026-07-26
+
+### Fixed
+- **Every MFD button was silently dropped on a host bundling canboatjs 3.x.** The
+  `130850` decode read the group and key out of canboatjs **2.10's** field names
+  (`fields.Event` and `fields["Unused B"]`, which is how that version renders this
+  Simnet layout). 3.x resolves each key to its own PGN variant instead
+  (`simnetCommandApStandby`, `simnetCommandApNav`, …) with camelCase fields and
+  neither of those names, so `isApGroup()` rejected every frame: the command counter
+  rose, `Last event` stuck on *non-AP-group (ignored)*, and nothing reached the pilot
+  while the plugin looked healthy. 0.6.1-beta made the plugin *load* under 3.x but
+  left the *decode* 2.x-only, which turned a visible startup crash into a silent
+  failure. Both group and key now come from the raw frame the plugin already
+  reassembles, guarded on source and age, with the canboat fields kept as a fallback.
+  Reported from an install that had picked up canboatjs 3.x.
+- **A fresh install could not find canboatjs at all.** It is an optional
+  peerDependency (npm does not auto-install it — the appstore's plugin-ci runs
+  `--ignore-scripts` and fails on native addons, which canboatjs pulls in via
+  socketcan), and the host server's own copy is unreachable from
+  `~/.signalk/node_modules`: Node resolves upward from the plugin and never enters the
+  globally installed server tree. Startup died with `Cannot find module
+  '@canboat/canboatjs'`. Resolution now falls back to a require rooted at the server's
+  entry file, which reaches the copy the server bundles. Safe on either major, since
+  the decode no longer depends on canboat field naming. If both paths fail the plugin
+  status now says so and gives the install command instead of showing a bare module
+  error.
+
 ## [0.7.2-beta] - 2026-07-23
 
 ### Fixed

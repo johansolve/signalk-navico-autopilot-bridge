@@ -153,8 +153,14 @@ restart the server. It then appears under **Server → Plugin Config** as
 **Autopilot — Navico bridge**. It is published as a **beta** — read the
 [Disclaimer](#disclaimer--no-warranty) first.
 
-`@canboat/canboatjs` is a peerDependency already present in a SignalK server
-install, so there is nothing else to install.
+`@canboat/canboatjs` is an optional peerDependency, so npm does not install it. The
+plugin looks for it beside itself first and otherwise falls back to the copy the
+SignalK server it runs under already bundles, so normally there is nothing to install.
+If the plugin status reports it missing on both paths, install it next to the plugin:
+
+```sh
+npm install @canboat/canboatjs --prefix ~/.signalk
+```
 
 To install from source instead (e.g. for development):
 
