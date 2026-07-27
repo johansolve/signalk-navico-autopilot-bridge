@@ -59,6 +59,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   status now says so and gives the install command instead of showing a bare module
   error.
 
+### Added
+- **A warning when the CAN transmit queue is too short for the product-info burst.** The
+  plugin reads `/sys/class/net/<iface>/tx_queue_len`; below 32 it logs the full explanation
+  once at startup and carries `txqueuelen <n> -- too short for product info, raise to 128`
+  in the plugin status line. The value is re-read periodically, so raising the queue clears
+  the warning without restarting anything. `txQueueLen` and `txQueueTooShort` are in the
+  status API too. A queue length of 0 (the noqueue qdisc, e.g. `vcan`) counts as
+  not applicable, not as too short. The queue belongs to the host — the plugin cannot raise it — but
+  the failure it causes (an MFD listing the AC with no name or serial, and a commissioning
+  wizard that will not complete) is otherwise invisible and cost two users several days
+  each to track down. Silent when the file cannot be read, e.g. off Linux.
+
 ### Documentation
 - **Troubleshooting: empty Name and Serial in the MFD device list**, which also keeps a
   commissioning wizard from completing. Product info (`126996`) is 134 bytes, i.e. 20

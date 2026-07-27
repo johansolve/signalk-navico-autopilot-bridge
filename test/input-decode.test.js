@@ -2,6 +2,9 @@
 
 const test = require('node:test')
 const assert = require('node:assert')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const ACEmulator = require('../lib/ac-emulator')
 
 // Regression guard for the silent 3.x button drop: the decode read the group and
@@ -112,6 +115,69 @@ test('caches the pilot wind datum under both canboat field spellings', () => {
     ac.onParsedPgn({ pgn: 65345, src: 204, fields })
     assert.strictEqual(ac.windDatumRad, 1.5, `not cached from ${JSON.stringify(fields)}`)
   }
+})
+
+// The queue belongs to the host, so the plugin can only detect and say so. 126996 is 20
+// fast-packet frames; a qlen of 10 (the mcp251x default) silently drops the tail.
+function withQueueLen (n) {
+  const ac = new ACEmulator({ debug () {} }, { bridge: 'dry-run' })
+  ac.readTxQueueLen = () => n
+  return ac
+}
+
+test('flags a CAN transmit queue too short for the product-info burst', () => {
+  const short = withQueueLen(10)
+  assert.match(short.statusSummary(), /txqueuelen 10 .*raise to 128/)
+  assert.strictEqual(short.statusJson().txQueueTooShort, true)
+
+  const ok = withQueueLen(128)
+  assert.doesNotMatch(ok.statusSummary(), /txqueuelen/)
+  assert.strictEqual(ok.statusJson().txQueueTooShort, false)
+
+  // Unknown (non-Linux, no such interface) must stay silent rather than guess.
+  const unknown = withQueueLen(null)
+  assert.doesNotMatch(unknown.statusSummary(), /txqueuelen/)
+  assert.strictEqual(unknown.statusJson().txQueueLen, null)
+  assert.strictEqual(unknown.statusJson().txQueueTooShort, false)
+})
+
+test('clears the queue warning once the queue is raised, without a restart', () => {
+  // The value is re-read on a timer. Someone who follows the advice must see the warning
+  // go away, otherwise the message reads as "I fixed it and it still complains".
+  let len = 10
+  const ac = new ACEmulator({ debug () {} }, { bridge: 'dry-run' })
+  ac.readTxQueueLen = () => len
+  assert.ok(ac.txQueueTooShort())
+  len = 128
+  ac.txqAt = Date.now() - 60000 // let the cache expire
+  assert.strictEqual(ac.txQueueTooShort(), false)
+  assert.doesNotMatch(ac.statusSummary(), /txqueuelen/)
+})
+
+test('parses the queue length out of the sysfs file', () => {
+  // Drives the real read against a stand-in sysfs tree, so the path, the trim and the
+  // parse are covered rather than just the null branch every non-Linux run takes.
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'navico-txq-'))
+  const write = (iface, body) => {
+    fs.mkdirSync(path.join(base, iface), { recursive: true })
+    fs.writeFileSync(path.join(base, iface, 'tx_queue_len'), body)
+  }
+  const at = (iface) => new ACEmulator({ debug () {} }, { bridge: 'dry-run', canInterface: iface })
+
+  write('can0', '10\n')
+  assert.strictEqual(at('can0').readTxQueueLen(base), 10)
+  write('can1', '128\n')
+  assert.strictEqual(at('can1').readTxQueueLen(base), 128)
+  // vcan reports 0: the noqueue qdisc, nothing is queued so nothing can overflow. Must
+  // not read as "too short", or the warning fires on the obvious bench-test interface.
+  write('vcan0', '0\n')
+  assert.strictEqual(at('vcan0').readTxQueueLen(base), null)
+  write('can2', '')
+  assert.strictEqual(at('can2').readTxQueueLen(base), null)
+  assert.strictEqual(at('can-nope0').readTxQueueLen(base), null)
+  assert.strictEqual(at('../../etc/passwd').readTxQueueLen(base), null)
+
+  fs.rmSync(base, { recursive: true, force: true })
 })
 
 test('does not pair a parsed PGN with another source raw frame', () => {

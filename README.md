@@ -522,6 +522,12 @@ sudo ip link set can0 txqueuelen 128
 
 Make it persistent next to wherever `ip link set can0 up` runs.
 
+The plugin checks the queue and will tell you: the status line carries
+`txqueuelen <n> -- too short for product info, raise to 128` while it is too short, and
+the server log gets the full explanation once at startup. The check re-reads the value, so
+raising the queue clears the warning without restarting anything. The queue belongs to the
+host, so this is all the plugin can do about it.
+
 Product info (`126996`) is 134 bytes, i.e. **20 fast-packet frames** sent back to back.
 Many SocketCAN drivers default to `txqueuelen 10` — notably `mcp251x`, the driver behind
 the common Raspberry Pi SPI CAN HATs — so the queue fills around frame 11 and the kernel
@@ -531,10 +537,17 @@ the start of Software Version Code fit in the frames that do get out, which is w
 row appears at all; the Model Version tail, the whole Model Serial Code, Certification
 Level and Load Equivalency sit past the cut and never reach the bus.
 
-Interfaces with a deeper transmit ring (Actisense NGT, `gs_usb` adapters, PICAN-M and
-similar) are unaffected, which is why this only bites some installs. Check yours with
-`ip -details link show can0` and look at `qlen`. Diagnosed by a user on a Pi 5 with an
-`mcp251x` HAT; the same default is present on the development boat.
+The default comes from the driver, so whether it bites depends on the adapter. A gateway
+that is not a SocketCAN interface at all — an Actisense NGT over USB serial, say — cannot
+hit this. Don't assume from the product name: the PiCAN boards are MCP2515 parts driven by
+`mcp251x` like the cheap HATs. Check the interface itself:
+
+```sh
+ip -details link show can0    # look at qlen
+```
+
+Diagnosed by a user on a Pi 5 with an `mcp251x` HAT; the same default was then found on
+the development boat, where raising it filled in the missing name and serial immediately.
 
 This is **not specific to this plugin**. Anything broadcasting a long fast-packet on a
 short transmit queue loses the tail — the SignalK server's own product info is the same
