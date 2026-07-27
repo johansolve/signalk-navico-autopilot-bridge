@@ -536,6 +536,11 @@ similar) are unaffected, which is why this only bites some installs. Check yours
 `ip -details link show can0` and look at `qlen`. Diagnosed by a user on a Pi 5 with an
 `mcp251x` HAT; the same default is present on the development boat.
 
+This is **not specific to this plugin**. Anything broadcasting a long fast-packet on a
+short transmit queue loses the tail — the SignalK server's own product info is the same
+134 bytes, and it appeared as a nameless row in the MFD's device list until the queue was
+raised, after which it listed as `signalk-server` with its serial.
+
 ## Scope
 
 This emulates the **AC (the commanded device)** to capture an MFD's autopilot
