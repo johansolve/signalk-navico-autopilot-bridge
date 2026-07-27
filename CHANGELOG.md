@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.3-beta] - 2026-07-26
+## [0.7.3-beta] - 2026-07-27
 
 ### Fixed
 - **Every MFD button was silently dropped on a host bundling canboatjs 3.x.** The
@@ -19,6 +19,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   failure. Both group and key now come from the raw frame the plugin already
   reassembles, guarded on source and age, with the canboat fields kept as a fallback.
   Reported from an install that had picked up canboatjs 3.x.
+- **The advertised NMEA 2000 version was nonsense on the wire.** The field has 0.001
+  resolution, so canboat multiplies on encode: `1200` became 1 200 000, wrapped the
+  u16 to 20352 and read back as version *20.352*. It is now given as `1.200`, which
+  encodes to raw 1200. Cosmetic — no MFD rejects the claim over it — but it was wrong
+  data. Reported by a user reading the emulator's product info off the bus.
 - **The pilot's locked wind angle was ignored on canboatjs 3.x**, for the same
   field-spelling reason: `65345` was read as `Wind Datum` only, so `windDatumRad` never
   cached. Tack and gybe then derived their turn side from the fluctuating live apparent
@@ -53,6 +58,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   spellings. If both paths fail the plugin
   status now says so and gives the install command instead of showing a bare module
   error.
+
+### Known issues
+- **Product info is truncated on the wire by canboatjs**, so the emulated AC appears in
+  an MFD's device list with empty Name and Serial. `126996` is 134 bytes, i.e. 20
+  fast-packet frames, sent in one synchronous loop on a non-blocking SocketCAN channel;
+  the kernel TX ring runs out and the frames past roughly the twelfth are dropped
+  silently. The encoder is fine, the transport loses them. Upstream issue, documented
+  in the README with the local workaround. Diagnosed and reported by a user.
 
 ## [0.7.2-beta] - 2026-07-23
 
