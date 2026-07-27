@@ -495,26 +495,46 @@ This is a beta; these are open:
   under way (2026-07-15) — but behaviour may differ on other backing pilots. (How well
   the pilot *holds* a course is the pilot's own business; the bridge only commands the
   mode.)
-- **The emulated AC shows up with empty Name and Serial in the MFD's device list.**
-  Product info (`126996`) is 134 bytes, i.e. 20 fast-packet frames, and canboatjs sends
-  them in one synchronous loop on a non-blocking SocketCAN channel. The kernel TX ring
-  runs out partway and the remaining frames are dropped silently, so everything past
-  roughly frame 12 — the tail of Model Version, all of Model Serial Code, Certification
-  Level and Load Equivalency — never reaches the bus. The plugin encodes the fields
-  correctly; the transport loses them. It is a canboatjs issue, not a bridge one, and it
-  affects any plugin broadcasting a long fast-packet. Both current majors drop frames,
-  by slightly different routes: 3.13 opens the channel with
-  `createRawChannelWithOptions(canDevice, { non_block_send: true })`, while 3.20 uses its
-  own native `canSocket` whose socket is `O_NONBLOCK` and whose `send()` discards the
-  `write()` return value, so a full TX queue is invisible either way. The send loop is
-  unchanged between them. Pacing the sends one frame per millisecond in `canbus.js`
-  fixes it locally.
+- **The emulated AC can show up with empty Name and Serial in the MFD's device list** —
+  and the MFD's commissioning wizard may not complete — if the CAN interface's transmit
+  queue is too short. This is an **interface setting, not a plugin bug**; see
+  [Empty name and serial](#empty-name-and-serial-in-the-device-list) below for the
+  one-line fix.
 - **Output is via loopback HTTP** with a configured token. There is no in-process
   **V2** path for a non-provider plugin: the whole command surface lives inside the
   server's express handlers, and `app.autopilotApi` exposes only provider registration.
   (SignalK's V1 PUT API is reachable in-process and would reach the same provider
   handlers without a token, but only because a plugin PUT bypasses the security check —
   the bridge does not take that route.)
+
+## Troubleshooting
+
+### Empty name and serial in the device list
+
+If the emulated AC appears in the MFD's (or a Triton's) device list as a row with the
+right manufacturer and function but **no Model Name and no Serial Number**, and the
+commissioning wizard will not complete, the CAN interface's **transmit queue is too
+short** to hold the product-info burst.
+
+```sh
+sudo ip link set can0 txqueuelen 128
+```
+
+Make it persistent next to wherever `ip link set can0 up` runs.
+
+Product info (`126996`) is 134 bytes, i.e. **20 fast-packet frames** sent back to back.
+Many SocketCAN drivers default to `txqueuelen 10` — notably `mcp251x`, the driver behind
+the common Raspberry Pi SPI CAN HATs — so the queue fills around frame 11 and the kernel
+drops the rest. The drops are silent because canboatjs sends on a non-blocking socket
+and does not inspect the `write()` result, so nothing surfaces as an error. Model ID and
+the start of Software Version Code fit in the frames that do get out, which is why the
+row appears at all; the Model Version tail, the whole Model Serial Code, Certification
+Level and Load Equivalency sit past the cut and never reach the bus.
+
+Interfaces with a deeper transmit ring (Actisense NGT, `gs_usb` adapters, PICAN-M and
+similar) are unaffected, which is why this only bites some installs. Check yours with
+`ip -details link show can0` and look at `qlen`. Diagnosed by a user on a Pi 5 with an
+`mcp251x` HAT; the same default is present on the development boat.
 
 ## Scope
 

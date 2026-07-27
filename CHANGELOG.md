@@ -59,14 +59,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   status now says so and gives the install command instead of showing a bare module
   error.
 
-### Known issues
-- **Product info is truncated on the wire by canboatjs**, so the emulated AC appears in
-  an MFD's device list with empty Name and Serial. `126996` is 134 bytes, i.e. 20
-  fast-packet frames, sent in one synchronous loop on a non-blocking SocketCAN channel;
-  the kernel TX ring runs out and the frames past roughly the twelfth are dropped
-  silently. The encoder is fine, the transport loses them. It affects both current
-  canboatjs majors, by slightly different routes. Upstream issue, documented in the
-  README with the local workaround. Diagnosed and reported by a user.
+### Documentation
+- **Troubleshooting: empty Name and Serial in the MFD device list**, which also keeps a
+  commissioning wizard from completing. Product info (`126996`) is 134 bytes, i.e. 20
+  fast-packet frames back to back, and many SocketCAN drivers default to `txqueuelen 10`
+  — notably `mcp251x`, behind the common Raspberry Pi SPI CAN HATs — so the queue fills
+  around frame 11 and the kernel drops the rest. Silently, because canboatjs sends on a
+  non-blocking socket without inspecting the `write()` result. `ip link set can0
+  txqueuelen 128` fixes it; no code change anywhere. Diagnosed by a user on a Pi 5 after
+  first suspecting the encoder, and the same qlen default turned out to be present on
+  the development boat.
 
 ## [0.7.2-beta] - 2026-07-23
 
