@@ -497,14 +497,18 @@ This is a beta; these are open:
   mode.)
 - **The emulated AC shows up with empty Name and Serial in the MFD's device list.**
   Product info (`126996`) is 134 bytes, i.e. 20 fast-packet frames, and canboatjs sends
-  them in one synchronous loop on a non-blocking SocketCAN channel
-  (`createRawChannelWithOptions(canDevice, { non_block_send: true })`). The kernel TX
-  ring runs out partway and the remaining frames are dropped silently, so everything
-  past roughly frame 12 — the tail of Model Version, all of Model Serial Code,
-  Certification Level and Load Equivalency — never reaches the bus. The plugin encodes
-  the fields correctly; the transport loses them. It is a canboatjs issue, not a bridge
-  one, and it affects any plugin broadcasting a long fast-packet. A user has reported it
-  upstream; pacing the sends one frame per millisecond in `canbus.js` fixes it locally.
+  them in one synchronous loop on a non-blocking SocketCAN channel. The kernel TX ring
+  runs out partway and the remaining frames are dropped silently, so everything past
+  roughly frame 12 — the tail of Model Version, all of Model Serial Code, Certification
+  Level and Load Equivalency — never reaches the bus. The plugin encodes the fields
+  correctly; the transport loses them. It is a canboatjs issue, not a bridge one, and it
+  affects any plugin broadcasting a long fast-packet. Both current majors drop frames,
+  by slightly different routes: 3.13 opens the channel with
+  `createRawChannelWithOptions(canDevice, { non_block_send: true })`, while 3.20 uses its
+  own native `canSocket` whose socket is `O_NONBLOCK` and whose `send()` discards the
+  `write()` return value, so a full TX queue is invisible either way. The send loop is
+  unchanged between them. Pacing the sends one frame per millisecond in `canbus.js`
+  fixes it locally.
 - **Output is via loopback HTTP** with a configured token. There is no in-process
   **V2** path for a non-provider plugin: the whole command surface lives inside the
   server's express handlers, and `app.autopilotApi` exposes only provider registration.

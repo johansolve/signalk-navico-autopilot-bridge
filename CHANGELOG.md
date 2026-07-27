@@ -64,8 +64,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   an MFD's device list with empty Name and Serial. `126996` is 134 bytes, i.e. 20
   fast-packet frames, sent in one synchronous loop on a non-blocking SocketCAN channel;
   the kernel TX ring runs out and the frames past roughly the twelfth are dropped
-  silently. The encoder is fine, the transport loses them. Upstream issue, documented
-  in the README with the local workaround. Diagnosed and reported by a user.
+  silently. The encoder is fine, the transport loses them. It affects both current
+  canboatjs majors, by slightly different routes. Upstream issue, documented in the
+  README with the local workaround. Diagnosed and reported by a user.
 
 ## [0.7.2-beta] - 2026-07-23
 
