@@ -39,122 +39,171 @@ module.exports = function (app) {
       'ALPHA: see README for verified behaviour and known limitations.'
   }
 
+  // Which flat option belongs in which config-page group. The grouping is presentation only:
+  // flatten() turns it back into the single flat object the emulator and this file already take,
+  // and start() rewrites a pre-0.8.1 flat config into the grouped shape once, so upgrading does
+  // not silently reset anyone's settings to the defaults the empty groups would show.
+  const GROUPS = {
+    n2k: ['canInterface', 'acModel', 'preferredAddress', 'enableFirehose', 'enableStdPgns'],
+    pilot: ['bridge', 'autopilotId', 'skHost', 'skPort', 'token'],
+    advance: ['autoAdvanceMaxDeg'],
+    restart: ['autoConfirmRestart'],
+    commissioning: ['enableCommissioningHead', 'headAddress']
+  }
+  const OPTION_KEYS = Object.keys(GROUPS).reduce((a, g) => a.concat(GROUPS[g]), [])
+
   const baseSchema = {
     type: 'object',
-    required: ['canInterface', 'acModel', 'preferredAddress', 'bridge'],
     properties: {
-      canInterface: {
-        type: 'string',
-        title: 'CAN interface',
-        description: 'SocketCAN interface the NMEA 2000 bus is on.',
-        default: 'can0'
+      n2k: {
+        type: 'object',
+        title: 'NMEA 2000 and emulated device',
+        required: ['canInterface', 'acModel', 'preferredAddress'],
+        properties: {
+          canInterface: {
+            type: 'string',
+            title: 'CAN interface',
+            description: 'SocketCAN interface the NMEA 2000 bus is on.',
+            default: 'can0'
+          },
+          acModel: {
+            type: 'string',
+            title: 'Emulated AC model',
+            description: 'Identity broadcast to the MFD. Both AC42 and AC12 bind a ' +
+              'Vulcan 7; the model only sets the reported product info, not whether ' +
+              'it binds. AC42 matches the reference capture.',
+            enum: ['AC42', 'AC12'],
+            default: 'AC42'
+          },
+          preferredAddress: {
+            type: 'number',
+            title: 'Preferred N2K source address',
+            description: 'Address the emulated AC claims on the bus.',
+            default: 35
+          },
+          enableFirehose: {
+            type: 'boolean',
+            title: 'Broadcast AC autopilot state (required)',
+            description: 'Send the full Simrad AP state/telemetry broadcast a real ' +
+              'AC emits. Required for the MFD to bind and for the control view to ' +
+              'unlock. Leave on.',
+            default: true
+          },
+          enableStdPgns: {
+            type: 'boolean',
+            title: 'Also send standard nav PGNs (advanced, A/B only)',
+            description: 'Emit 127245/127237/127250 as the real AC also does. These ' +
+              'DUPLICATE other bus sources (rudder/heading/track) and can cause ' +
+              'conflicting data — only enable for protocol A/B testing.',
+            default: false
+          }
+        }
       },
-      acModel: {
-        type: 'string',
-        title: 'Emulated AC model',
-        description: 'Identity broadcast to the MFD. Both AC42 and AC12 bind a ' +
-          'Vulcan 7; the model only sets the reported product info, not whether ' +
-          'it binds. AC42 matches the reference capture.',
-        enum: ['AC42', 'AC12'],
-        default: 'AC42'
+      pilot: {
+        type: 'object',
+        title: 'Pilot control via SignalK',
+        required: ['bridge'],
+        properties: {
+          bridge: {
+            type: 'string',
+            title: 'Bridge mode',
+            description: 'off = ignore incoming commands; dry-run = decode and log ' +
+              'only (no steering); live = translate commands to the autopilot. ' +
+              'Default dry-run for safety — set live deliberately.',
+            enum: ['off', 'dry-run', 'live'],
+            default: 'dry-run'
+          },
+          autopilotId: {
+            type: 'string',
+            title: 'Target autopilot id (V2 API)',
+            description: 'Which `autopilots/<id>` the V2 API drives. Usually `_default`.',
+            default: '_default'
+          },
+          skHost: {
+            type: 'string',
+            title: 'SignalK host',
+            description: 'Host for the loopback V2 API calls.',
+            default: '127.0.0.1'
+          },
+          skPort: {
+            type: 'number',
+            title: 'SignalK port',
+            description: 'Port for the loopback V2 API calls.',
+            default: 3000
+          },
+          token: {
+            type: 'string',
+            title: 'API token (optional manual override)',
+            description: 'Normally leave EMPTY. In live mode the plugin requests a ' +
+              'readwrite token automatically via an access request you approve under ' +
+              'Security → Access Requests, and stores it. Set this only to force a ' +
+              'specific token (must be a valid JWT; a non-JWT value is ignored).'
+          }
+        }
       },
-      preferredAddress: {
-        type: 'number',
-        title: 'Preferred N2K source address',
-        description: 'Address the emulated AC claims on the bus.',
-        default: 35
+      // A checkbox renders its title as the label BELOW its own description, and the admin UI's
+      // markdown option is read by the field template, which the checkbox widget bypasses -- so
+      // a boolean cannot get a heading of its own. The group title is the only heading available
+      // to it, which is why the two Track confirmations are separate groups rather than one:
+      // it puts a heading above the restart explanation instead of leaving it floating under the
+      // waypoint-advance input, reading as part of that field.
+      advance: {
+        type: 'object',
+        title: 'Track waypoint advance',
+        description: 'At each waypoint of a route the pilot enters Track-pending and normally ' +
+          'waits for a control-head Yes before turning onto the next leg. Requires Bridge ' +
+          'mode = live.',
+        properties: {
+          autoAdvanceMaxDeg: {
+            type: 'number',
+            title: 'Auto-confirm waypoint advance up to (degrees; 0 = off)',
+            description: 'Answer that automatically when the course change to the next leg is ' +
+              'at most this many degrees, so small turns need no control-head press. Larger ' +
+              'turns are left for a manual confirm. 0 disables it (every advance is manual). ' +
+              'Set deliberately.',
+            default: 0
+          }
+        }
       },
-      enableFirehose: {
-        type: 'boolean',
-        title: 'Broadcast AC autopilot state (required)',
-        description: 'Send the full Simrad AP state/telemetry broadcast a real ' +
-          'AC emits. Required for the MFD to bind and for the control view to ' +
-          'unlock. Leave on.',
-        default: true
-      },
-      enableStdPgns: {
-        type: 'boolean',
-        title: 'Also send standard nav PGNs (advanced, A/B only)',
-        description: 'Emit 127245/127237/127250 as the real AC also does. These ' +
-          'DUPLICATE other bus sources (rudder/heading/track) and can cause ' +
-          'conflicting data — only enable for protocol A/B testing.',
-        default: false
-      },
-      bridge: {
-        type: 'string',
-        title: 'Bridge mode',
-        description: 'off = ignore incoming commands; dry-run = decode and log ' +
-          'only (no steering); live = translate commands to the autopilot. ' +
-          'Default dry-run for safety — set live deliberately.',
-        enum: ['off', 'dry-run', 'live'],
-        default: 'dry-run'
-      },
-      autopilotId: {
-        type: 'string',
-        title: 'Target autopilot id (V2 API)',
-        description: 'Which `autopilots/<id>` the V2 API drives. Usually `_default`.',
-        default: '_default'
-      },
-      skHost: {
-        type: 'string',
-        title: 'SignalK host',
-        description: 'Host for the loopback V2 API calls.',
-        default: '127.0.0.1'
-      },
-      skPort: {
-        type: 'number',
-        title: 'SignalK port',
-        description: 'Port for the loopback V2 API calls.',
-        default: 3000
-      },
-      token: {
-        type: 'string',
-        title: 'API token (optional manual override)',
-        description: 'Normally leave EMPTY. In live mode the plugin requests a ' +
-          'readwrite token automatically via an access request you approve under ' +
-          'Security → Access Requests, and stores it. Set this only to force a ' +
-          'specific token (must be a valid JWT; a non-JWT value is ignored).'
-      },
-      autoAdvanceMaxDeg: {
-        type: 'number',
-        title: 'Auto-confirm Track waypoint advance up to (degrees; 0 = off)',
-        description: 'In Track mode, when the pilot asks to confirm a waypoint advance ' +
-          '(it enters Track-pending and normally waits for a control-head Yes), ' +
-          'automatically confirm it when the course change to the next leg is at most ' +
-          'this many degrees — so small turns need no control-head press. Larger turns ' +
-          'are left for a manual confirm. 0 disables it (every advance is manual). ' +
-          'Requires Bridge mode = live; set deliberately.',
-        default: 0
-      },
-      autoConfirmRestart: {
-        type: 'boolean',
-        title: 'Auto-confirm a Track restart (leg re-origin)',
+      restart: {
+        type: 'object',
+        title: 'Track restart',
         description: 'Engaging Nav while off the rhumb line makes the pilot swing hard to ' +
-          'intercept it; pressing Restart on the MFD re-origins the leg onto the boat so it ' +
-          'steers straight at the same waypoint instead. The pilot treats that as a course ' +
-          'change and asks for a control-head Yes. Confirm it automatically, up to a 90° ' +
-          'turn — beyond that (the waypoint abaft the beam) it is still left for a manual ' +
-          'confirm. Has its own switch so you can leave every waypoint turn manual and still ' +
-          'not be asked for the restart you just pressed for; with it off a re-origin is ' +
-          'judged by the waypoint-advance setting above instead, so this is not purely a ' +
-          'widening. Requires Bridge mode = live.',
-        default: false
+          'intercept it. Pressing Restart on the MFD re-origins the leg onto the boat so it ' +
+          'steers straight at the same waypoint instead — and the pilot asks for a ' +
+          'control-head Yes for that too. Requires Bridge mode = live.',
+        properties: {
+          autoConfirmRestart: {
+            type: 'boolean',
+            title: 'Auto-confirm a Track restart (leg re-origin)',
+            description: 'Answer it automatically, up to a 90° turn. Beyond that (the waypoint ' +
+              'abaft the beam a re-origin asks for a near-reciprocal turn) it stays manual. ' +
+              'Its own switch, not a widening of the waypoint-advance setting — see the README.',
+            default: false
+          }
+        }
       },
       // Last on the page on purpose: needed once, at first commissioning, and off ever after.
-      enableCommissioningHead: {
-        type: 'boolean',
-        title: 'Commissioning mode (emulate a control head)',
-        description: 'Emulate a B&G keypad on a second address to open the MFD ' +
-          '"press standby" gate for FIRST commissioning. Enable only while ' +
-          'commissioning, then turn it off — not needed for normal operation.',
-        default: false
-      },
-      headAddress: {
-        type: 'number',
-        title: 'Commissioning head N2K address',
-        description: 'Source address the emulated control head claims (only used ' +
-          'when commissioning mode is on).',
-        default: 44
+      commissioning: {
+        type: 'object',
+        title: 'Commissioning',
+        description: 'Only for FIRST commissioning against a new MFD. Leave off in normal use.',
+        properties: {
+          enableCommissioningHead: {
+            type: 'boolean',
+            title: 'Commissioning mode (emulate a control head)',
+            description: 'Emulate a B&G keypad on a second address to open the MFD ' +
+              '"press standby" gate. Enable only while commissioning, then turn it off.',
+            default: false
+          },
+          headAddress: {
+            type: 'number',
+            title: 'Commissioning head N2K address',
+            description: 'Source address the emulated control head claims (only used ' +
+              'when commissioning mode is on).',
+            default: 44
+          }
+        }
       }
     }
   }
@@ -177,17 +226,19 @@ module.exports = function (app) {
         // list never implies a powered-down plotter is still there. 'missing' (never heard
         // since start) reads as offline too -- same thing from the user's side.
         const mark = (name, presence) => name + ((presence === 'offline' || presence === 'missing') ? ' _(offline)_' : '')
-        if (d.mfdName && s.properties.acModel) {
-          s.properties.acModel.description += '\n\n**Bound MFD:** ' + mark(d.mfdName, d.mfdPresence)
+        const acModel = s.properties.n2k && s.properties.n2k.properties.acModel
+        const autopilotId = s.properties.pilot && s.properties.pilot.properties.autopilotId
+        if (d.mfdName && acModel) {
+          acModel.description += '\n\n**Bound MFD:** ' + mark(d.mfdName, d.mfdPresence)
         }
-        if (s.properties.autopilotId) {
+        if (autopilotId) {
           const rows = []
           if (d.pilotName) { rows.push('- Course computer: ' + mark(d.pilotName, d.pilotPresence)) }
           if (d.acuName) { rows.push('- Actuator: ' + mark(d.acuName, d.acuPresence)) }
           if (d.controlHeadName) { rows.push('- Control head: ' + mark(d.controlHeadName, d.headPresence)) }
           if (d.providerId) { rows.push('- Provider: ' + d.providerId) }
           if (rows.length) {
-            s.properties.autopilotId.description += '\n\n**Detected pilot hardware**\n\n' + rows.join('\n')
+            autopilotId.description += '\n\n**Detected pilot hardware**\n\n' + rows.join('\n')
           }
         }
       }
@@ -197,9 +248,54 @@ module.exports = function (app) {
 
   // Render markdown in the two field descriptions the schema function augments, so the
   // detected-device lists show as formatted lists instead of literal ** and - text.
+  // Render markdown in the two field descriptions the schema function augments, so the
+  // detected-device lists show as formatted lists instead of literal ** and - text. Only these
+  // two: the option is read by the admin UI's FIELD TEMPLATE, so it works for a text or select
+  // field but does nothing on a checkbox, whose widget renders its own description -- asking for
+  // it there just prints the asterisks.
+  const md = { 'ui:options': { enableMarkdownInDescription: true } }
   plugin.uiSchema = {
-    acModel: { 'ui:options': { enableMarkdownInDescription: true } },
-    autopilotId: { 'ui:options': { enableMarkdownInDescription: true } }
+    n2k: { acModel: md },
+    pilot: { autopilotId: md }
+  }
+
+  // The groups are a config-page device only; everything downstream takes one flat object.
+  // Collect the known option keys wherever they sit -- top level, or inside any group object.
+  // Deliberately shape-agnostic rather than keyed to one past layout: the grouping has already
+  // been rearranged once, and this keeps a config written by ANY version readable.
+  function flatten (options) {
+    const out = {}
+    const take = (obj) => {
+      if (!obj || typeof obj !== 'object') { return }
+      for (const k of Object.keys(obj)) {
+        if (OPTION_KEYS.indexOf(k) !== -1) { out[k] = obj[k] } else { take(obj[k]) }
+      }
+    }
+    take(options)
+    return out
+  }
+
+  // A config saved under an older layout -- flat, or an earlier grouping -- must be rewritten
+  // into the current one BEFORE anyone opens the page. Left alone the admin UI renders the
+  // groups it cannot find from their defaults, and the first save commits those over the live
+  // settings: bridge would quietly drop back to dry-run. savePluginOptions only writes the file
+  // (no plugin restart), and the rewritten config then equals the canonical form, so the test
+  // below is false on the next start and it cannot loop.
+  function needsRegroup (options, canonical) {
+    if (!options || typeof options !== 'object') { return false }
+    if (Object.keys(flatten(options)).length === 0) { return false }   // nothing saved yet
+    return JSON.stringify(options) !== JSON.stringify(canonical)
+  }
+
+  function regroup (flat) {
+    const out = {}
+    for (const g of Object.keys(GROUPS)) {
+      out[g] = {}
+      for (const k of GROUPS[g]) {
+        if (k in flat) { out[g][k] = flat[k] }
+      }
+    }
+    return out
   }
 
   // A SignalK token is a JWT (three dot-separated parts). Ignore anything else
@@ -207,8 +303,14 @@ module.exports = function (app) {
   function validJwt (t) { return typeof t === 'string' && t.split('.').length === 3 }
 
   plugin.start = function (options) {
-    const o = options || {}
+    const o = flatten(options)
     try {
+      const canonical = regroup(o)
+      if (needsRegroup(options, canonical) && typeof app.savePluginOptions === 'function') {
+        app.savePluginOptions(canonical, (err) => {
+          if (err) { app.error('could not rewrite config into the current layout: ' + (err.message || err)) } else { app.debug('rewrote config into the current grouped layout') }
+        })
+      }
       // Token precedence: a VALID config token > previously granted token.
       const saved = readSaved()
       let configToken = null

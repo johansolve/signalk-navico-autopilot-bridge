@@ -457,7 +457,8 @@ route first; if it hasn't, the engage is safely rejected rather than fired blind
 ### Automatic waypoint advance (opt-in)
 
 At each waypoint of a route the pilot enters Track-pending again and waits for the same
-confirm. Set **Auto-confirm Track waypoint advance up to (degrees)** above 0 and the bridge
+confirm. Under **Track waypoint advance**, set **Auto-confirm waypoint advance up to
+(degrees)** above 0 and the bridge
 confirms that automatically when the course change to the next leg is within the limit — so
 small turns sail through with no control-head press. The turn is measured from
 `navigation.courseGreatCircle.bearingTrackTrue` (the server's decode of the plotter's route
@@ -470,9 +471,9 @@ pilot. Off by default; larger turns always fall through to a manual confirm on t
 Engaging Nav while off the rhumb line makes the pilot swing hard to intercept it. Pressing
 **Restart** on the MFD re-origins the active leg onto the boat, so it steers straight at the
 same waypoint instead — but the pilot treats that as a course change and goes Track-pending,
-asking for a control-head Yes just as it does at a waypoint. Enable **Auto-confirm a Track
-restart (leg re-origin)** and the bridge answers it, so the Restart takes effect without
-touching the pilot's own head.
+asking for a control-head Yes just as it does at a waypoint. Under **Track restart**, enable
+**Auto-confirm a Track restart (leg re-origin)** and the bridge answers it, so the Restart
+takes effect without touching the pilot's own head.
 
 A restart is told apart from a waypoint advance by the **destination**: a re-origin keeps the
 same waypoint, an advance moves to the next one, so the bridge compares

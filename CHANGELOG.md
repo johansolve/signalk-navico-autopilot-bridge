@@ -20,6 +20,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Independent of the waypoint-advance limit; off by default; `live` only. With it off,
   behaviour is unchanged from before.
 
+### Changed
+- **The config page is grouped into sections** — *NMEA 2000 and emulated device*, *Pilot
+  control via SignalK*, *Track waypoint advance*, *Track restart*, *Commissioning* — instead of
+  one flat list of fourteen fields where nothing said which setting belonged with which.
+  Commissioning is last: it is needed once, at first commissioning, and off ever after. The two
+  Track confirmations are separate sections rather than one because a checkbox cannot carry a
+  heading of its own — the admin UI renders a boolean's title as the label *below* its
+  description, and its markdown option is read by the field template, which the checkbox widget
+  bypasses. A group title is the only heading available, so without the split the restart
+  explanation floated under the waypoint-advance input and read as part of that field. The
+  grouping is presentation only; the plugin still takes one flat object internally, and a config
+  saved under any older layout is rewritten into the current one at startup. Without that the
+  page would render the groups it cannot find from their defaults and the first save would
+  commit them over live settings — `bridge` would quietly fall back to `dry-run`.
+
 ### Fixed
 - **Leg state could be sized against a route that was no longer active.** SignalK never nulls
   a path when its source stops, so `navigation.courseGreatCircle.bearingTrackTrue` keeps
