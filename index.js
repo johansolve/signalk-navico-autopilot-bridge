@@ -115,6 +115,32 @@ module.exports = function (app) {
           'Security → Access Requests, and stores it. Set this only to force a ' +
           'specific token (must be a valid JWT; a non-JWT value is ignored).'
       },
+      autoAdvanceMaxDeg: {
+        type: 'number',
+        title: 'Auto-confirm Track waypoint advance up to (degrees; 0 = off)',
+        description: 'In Track mode, when the pilot asks to confirm a waypoint advance ' +
+          '(it enters Track-pending and normally waits for a control-head Yes), ' +
+          'automatically confirm it when the course change to the next leg is at most ' +
+          'this many degrees — so small turns need no control-head press. Larger turns ' +
+          'are left for a manual confirm. 0 disables it (every advance is manual). ' +
+          'Requires Bridge mode = live; set deliberately.',
+        default: 0
+      },
+      autoConfirmRestart: {
+        type: 'boolean',
+        title: 'Auto-confirm a Track restart (leg re-origin)',
+        description: 'Engaging Nav while off the rhumb line makes the pilot swing hard to ' +
+          'intercept it; pressing Restart on the MFD re-origins the leg onto the boat so it ' +
+          'steers straight at the same waypoint instead. The pilot treats that as a course ' +
+          'change and asks for a control-head Yes. Confirm it automatically, up to a 90° ' +
+          'turn — beyond that (the waypoint abaft the beam) it is still left for a manual ' +
+          'confirm. Has its own switch so you can leave every waypoint turn manual and still ' +
+          'not be asked for the restart you just pressed for; with it off a re-origin is ' +
+          'judged by the waypoint-advance setting above instead, so this is not purely a ' +
+          'widening. Requires Bridge mode = live.',
+        default: false
+      },
+      // Last on the page on purpose: needed once, at first commissioning, and off ever after.
       enableCommissioningHead: {
         type: 'boolean',
         title: 'Commissioning mode (emulate a control head)',
@@ -129,17 +155,6 @@ module.exports = function (app) {
         description: 'Source address the emulated control head claims (only used ' +
           'when commissioning mode is on).',
         default: 44
-      },
-      autoAdvanceMaxDeg: {
-        type: 'number',
-        title: 'Auto-confirm Track waypoint advance up to (degrees; 0 = off)',
-        description: 'In Track mode, when the pilot asks to confirm a waypoint advance ' +
-          '(it enters Track-pending and normally waits for a control-head Yes), ' +
-          'automatically confirm it when the course change to the next leg is at most ' +
-          'this many degrees — so small turns need no control-head press. Larger turns ' +
-          'are left for a manual confirm. 0 disables it (every advance is manual). ' +
-          'Requires Bridge mode = live; set deliberately.',
-        default: 0
       }
     }
   }

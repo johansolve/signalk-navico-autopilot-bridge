@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.7.2-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.8.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
@@ -464,6 +464,34 @@ small turns sail through with no control-head press. The turn is measured from
 data) at the instant the pilot goes pending; if it cannot be measured with confidence the
 advance is left for a manual confirm, and it is never confirmed against an already-engaged
 pilot. Off by default; larger turns always fall through to a manual confirm on the control head.
+
+### Automatic Track restart (opt-in)
+
+Engaging Nav while off the rhumb line makes the pilot swing hard to intercept it. Pressing
+**Restart** on the MFD re-origins the active leg onto the boat, so it steers straight at the
+same waypoint instead — but the pilot treats that as a course change and goes Track-pending,
+asking for a control-head Yes just as it does at a waypoint. Enable **Auto-confirm a Track
+restart (leg re-origin)** and the bridge answers it, so the Restart takes effect without
+touching the pilot's own head.
+
+A restart is told apart from a waypoint advance by the **destination**: a re-origin keeps the
+same waypoint, an advance moves to the next one, so the bridge compares
+`navigation.courseGreatCircle.nextPoint.position` across the bearing jump. Distance to the
+waypoint deliberately is *not* used — at an advance it steps from the arrival radius to the
+next leg's length, which for closely spaced marks is barely a step at all, exactly the tight
+water where the advance limit matters most.
+
+Two limits stay in force whatever the setting. The turn is capped at **90°**: with the waypoint
+abaft the beam a re-origin asks for a near-reciprocal turn, which is an involuntary gybe, and
+that case is left on the control head. And the leg being re-origined must have been settled for
+at least 5 s, so a re-origin landing inside a route-activation burst is not acted on. This
+setting is **independent of the waypoint-advance limit above** — you can have every waypoint
+turn confirmed by hand and still not be asked for the restart you just pressed for. With it off,
+behaviour is exactly as it was before the setting existed. Off by default; requires `live`.
+
+> Course paths are only read while they are **fresh** (10 s). SignalK keeps a path's last value
+> in the model forever after its source stops, so without that guard a deactivated route's leg
+> would sit there and the first turn of the *next* route would be sized against it.
 
 ## Status webapp
 

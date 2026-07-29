@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0-beta] - 2026-07-29
+
+### Added
+- **Auto-confirm a Track restart (leg re-origin), opt-in.** Engaging Nav off the rhumb line
+  makes the pilot swing hard to intercept it; pressing **Restart** on the MFD re-origins the
+  leg onto the boat so it steers straight at the same waypoint, but the pilot reads that as a
+  course change, goes Track-pending and asks for a control-head Yes. The new **Auto-confirm a
+  Track restart** setting answers it. A re-origin is told from a waypoint advance by the
+  destination position across the bearing jump, not by distance to the waypoint: at an advance
+  the distance steps from the arrival radius to the next leg's length, so closely spaced marks
+  barely step at all — precisely the tight water where the advance limit matters. Capped at
+  **90°** regardless (with the waypoint abaft the beam a re-origin asks for a near-reciprocal
+  turn, i.e. an involuntary gybe) and the re-origined leg must have been settled ≥5 s.
+  Independent of the waypoint-advance limit; off by default; `live` only. With it off,
+  behaviour is unchanged from before.
+
+### Fixed
+- **Leg state could be sized against a route that was no longer active.** SignalK never nulls
+  a path when its source stops, so `navigation.courseGreatCircle.bearingTrackTrue` keeps
+  serving the last leg indefinitely — observed 29 minutes stale on a live server. Deactivating
+  a route and activating another therefore sized the first "turn" against a leg from the
+  previous route, and the held-duration trust gate waved it through because a frozen leg is by
+  definition old. Course paths are now read only while fresh (10 s), verified against the real
+  1 Hz publication rate (worst in-passage gap 4.9 s). Affects the pre-existing automatic
+  waypoint advance, not just the new restart path.
+- **The nav-confirm window is now resolved on the 65379 frame itself** rather than at the next
+  2 Hz poll, so the pilot passing through Track-engaged and back into pending — which a Restart
+  pressed right after the confirm does — no longer risks leaving the pending flag set.
+
 ## [0.7.3-beta] - 2026-07-27
 
 ### Fixed
