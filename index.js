@@ -298,19 +298,49 @@ module.exports = function (app) {
     return out
   }
 
+  // Rewrite a config saved under an older layout into the current one. Returns the flat view of
+  // whatever was there, so callers can use it whether or not the rewrite was needed.
+  //
+  // Called from BOTH start() and schema(). Doing it only at start would leave one upgrade path
+  // broken: a plugin that is DISABLED when the new version lands never runs start(), so opening
+  // its config page would render the groups it cannot find from their defaults, and the user's
+  // first save would commit those over their real settings. An upgrade must never demand that
+  // the user re-enter anything, and must never quietly reset them for not knowing to.
+  function migrateSavedConfig (options) {
+    try {
+      let cfg = options
+      if (cfg === undefined && typeof app.readPluginOptions === 'function') {
+        const saved = app.readPluginOptions()
+        cfg = saved && saved.configuration
+      }
+      const flat = flatten(cfg)
+      const canonical = regroup(flat)
+      if (needsRegroup(cfg, canonical) && typeof app.savePluginOptions === 'function') {
+        app.savePluginOptions(canonical, (err) => {
+          if (err) { app.error('could not rewrite config into the current layout: ' + (err.message || err)) } else { app.debug('rewrote config into the current grouped layout') }
+        })
+      }
+      return flat
+    } catch (e) {
+      app.debug('config layout rewrite skipped: ' + (e && e.message))
+      return flatten(options)
+    }
+  }
+
+  // Rewrite an older config layout at load time, not from schema(): the server reads the saved
+  // config and calls schema() within the SAME request, so migrating from there is one page-load
+  // too late -- the first load after an upgrade would still render the groups it cannot find from
+  // their defaults, and a Save on that page would commit them over real settings. Deferred by a
+  // tick because savePluginOptions/readPluginOptions are attached to app AFTER this factory runs.
+  setImmediate(() => migrateSavedConfig())
+
   // A SignalK token is a JWT (three dot-separated parts). Ignore anything else
   // pasted into the config field so a stray value can't shadow a valid token.
   function validJwt (t) { return typeof t === 'string' && t.split('.').length === 3 }
 
   plugin.start = function (options) {
-    const o = flatten(options)
+    const o = migrateSavedConfig(options)
     try {
-      const canonical = regroup(o)
-      if (needsRegroup(options, canonical) && typeof app.savePluginOptions === 'function') {
-        app.savePluginOptions(canonical, (err) => {
-          if (err) { app.error('could not rewrite config into the current layout: ' + (err.message || err)) } else { app.debug('rewrote config into the current grouped layout') }
-        })
-      }
       // Token precedence: a VALID config token > previously granted token.
       const saved = readSaved()
       let configToken = null
