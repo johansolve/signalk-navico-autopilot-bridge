@@ -116,7 +116,10 @@ function render (d) {
   }
 
   const b = $('banner')
+  // A downgraded display outranks the rest: standby on the MFD while the pilot may well still be
+  // steering is the one state that reads as the opposite of what it means.
   if (d.noProvider) { cls(b, 'banner', 'err'); b.textContent = 'No autopilot provider found — install and configure a SignalK V2 autopilot provider. The bridge binds the MFD and decodes buttons but cannot steer.' }
+  else if (d.displayDowngraded) { cls(b, 'banner', 'err'); b.textContent = 'Cannot verify the pilot is engaged (' + (d.commandedMode || '?') + ' commanded, broadcasting ' + (d.displayMode || 'standby') + ') — the MFD is being told standby because nothing here can confirm otherwise. The pilot may still be steering: check the control head.' }
   else if (d.bridge === 'live' && !d.hasToken) { cls(b, 'banner', 'err'); b.textContent = 'Live but no API token — approve the access request under Security → Access Requests so the bridge can steer.' }
   else if (d.bridge === 'dry-run') { cls(b, 'banner', 'warn'); b.textContent = 'Dry-run: buttons are decoded and logged but not sent to the pilot. Set the bridge to live in the config to steer.' }
   else if (d.bridge === 'off') { cls(b, 'banner', 'warn'); b.textContent = 'Bridge is off: incoming MFD commands are ignored.' }
