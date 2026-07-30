@@ -4,6 +4,72 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1-beta] - 2026-07-30
+
+### Changed
+- **A single Nav press can no longer engage Track.** It used to `PUT /state route` on the first
+  press, on the belief that this only walked the pilot to a pending state and left the engage to
+  the confirm. That belief was wrong: `PUT /state route` writes `SeatalkPilotMode16` **0x0180
+  TrackMode** and `advanceWaypoint` writes **0x0181 NoDriftCogReferencedInTrackCourseChanges** —
+  two co-equal Track *sub-modes* of one shared register, not a request and its answer. The pilot
+  promotes itself 0x0180 → 0x0181 unprompted and faster than the MFD's dialog renders, and the
+  dialog was cleared on 0x0181, so it was torn down before it could be read. Under way this let
+  one press take the boat into Track on a very large course change with nothing to confirm.
+  Now the first press only *arms* the dialog and sends the pilot nothing; the confirm is the only
+  path that commands route; the dialog is held a minimum time before the pilot's own mode may
+  latch it; and a follow-up completes an engage the skipper already authorised once the pilot
+  actually reaches Track. The two states are named `track` / `track-cog` rather than
+  `route-pending` / `route-engaged` — the old wording read as a handshake the bridge takes part
+  in, and that framing cost a day of wrong theories.
+
+### Fixed
+
+The next four were reported, diagnosed against the source and specified in detail by **Magnus**,
+who runs the bridge against a SeaTalk1 pilot through a Raymarine E22158 whose SeaTalk-to-N2K
+side drops out — which is how the whole "the display says engaged but nothing is steering" class
+of problem came to light. The design call to treat an unverifiable engagement as `standby`, and
+the hysteresis on it, are his.
+
+- **Course nudges reached a pilot the provider had declared unreachable.** The V2 spec has a
+  provider return `off-line` when it cannot reach the pilot (`@signalk/server-api`,
+  `autopilotapi.d.ts`, on `getState`). `off-line` is not `standby`, so a bare `!== 'standby'`
+  test passed it and `engaged()` let ±1°/±10° through. `engaged()` now requires one of the four
+  real modes and a present provider, and a `normalizeMode()` helper keeps non-modes out of
+  `commandedMode` and out of the state comparison — which also stops that comparison from
+  correcting and logging on every poll forever.
+- **A refused command left the display claiming an engagement that never happened.** The mode was
+  set optimistically before the call and the outcome only ever reached `lastV2Result`; the one
+  thing that could correct it — the state poll — fails for largely the *same* reasons that stop
+  the command: no token, provider gone, server restarting. The MFD would sit on "engaged", with
+  the firehose broadcasting an engaged state and a heading-to-steer, while nothing steered.
+  Commands now report failure, a refused mode press rolls the display back (to the pilot's real
+  state if it is readable, else to what was shown before), and a refused confirm returns to the
+  dialog with its original timestamp so the anti-stuck timeout still expires. A sequence counter
+  keeps a late failure from undoing a newer press.
+- **The bridge no longer claims an engagement it cannot verify.** In `live`, with no provider or
+  a state poll that has been unusable for the whole freshness window, the firehose broadcasts
+  `standby`. An unverifiable "engaged" is the more dangerous lie: the pilot keeps steering
+  whatever the display says, and there is no "don't know" to broadcast. Damped by several
+  consecutive failed polls so it cannot flap the MFD's lost-autopilot alarm — recovery is
+  immediate, only the downgrade is delayed. `displayMode` and `displayDowngraded` appear in the
+  status API, the plugin status line, and as a webapp banner, so a display dropping to standby
+  is not read as the pilot disengaging itself.
+- **Two ways to skip a waypoint**, found in review before either reached the water: the
+  waypoint-advance logic fired on the same pilot-state edge as an authorised engage, sending a
+  second `advanceWaypoint` at an already-engaged pilot; and the engage follow-up acted on a mode
+  word up to 5 s old, while the pilot changes mode in well under one 1 Hz broadcast period. Both
+  now require the observation to postdate the bridge's own command.
+- **A slow but successful command read as a refusal.** The provider's `verifyChange` only replies
+  on its sixth or seventh retry, so the client's 5 s timeout always fired first and the
+  `400 Did not receive change confirmation` carve-out could never match. Harmless while that only
+  reached a status line; not once a refusal rolls the display back. The timeout is now 10 s.
+- **An upgrade could silently reset the config of a disabled plugin.** The grouped-layout rewrite
+  ran only in `start()`, so a plugin that was disabled when the new version landed never got it —
+  its config page then rendered the groups it could not find from their defaults, and the first
+  save committed those over real settings, dropping `bridge` back to `dry-run`. The rewrite now
+  runs at load time. Doing it from `schema()` would have been one page-load too late: the server
+  reads the saved config and calls `schema()` within the same request.
+
 ## [0.8.0-beta] - 2026-07-29
 
 ### Added
