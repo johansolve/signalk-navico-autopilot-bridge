@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.2-beta] - 2026-08-01
+
+### Fixed
+- **An auto-confirm the pilot ignores is now resent instead of being left to the control head.**
+  The EV-200 does not always act on the `SeatalkPilotMode16` write that answers a Track-pending
+  prompt, and the skipper was left confirming on the p70 after 8–10 seconds of chirping. Measured
+  across all 14 pending episodes of a day under way: of six writes that landed within 200 ms of the
+  pilot entering pending, four were obeyed and two were not — including two writes 14 ms after the
+  edge with **opposite** outcomes, identical bytes and the same kind of turn. The loss is therefore
+  not a timing threshold, and a delay before answering (written and reverted the same afternoon)
+  cannot address it; a dropped frame or a failed fast-packet reassembly fits the data, and is
+  silent and indistinguishable from being ignored. The confirm is now repeated every 2 s for up to
+  6 s while the pilot is demonstrably still asking, which covers a lost frame and covers a timing
+  effect too if one exists, and costs nothing when the first write lands.
+- No consent is widened by this: a resend repeats a decision already made for that pending episode
+  and never makes a new one. Leaving Track-pending ends the episode on the mode **edge**, not on a
+  sampled value — the pilot broadcasts at 1 Hz while the resend runs at 2 Hz, so a server stall can
+  queue "left pending" and "arrived at the next waypoint" behind a tick that would otherwise answer
+  an episode the skipper never saw, and possibly one the auto-confirm logic had refused. A resend
+  also requires a pilot observation that **postdates the bridge's own command**, the same rule the
+  engage path and the Nav re-confirm use; without it the ~1 s blind spot between mode broadcasts is
+  wide enough for a Standby press on the control head to be answered by putting the pilot back into
+  Track. A provider refusal ends the resend and keeps its real reason on the status page.
+
+### Notes
+- Near-collinear waypoint advances (two legs within 1° of each other, roughly one waypoint in nine
+  on a densely pointed route) still ask for a manual confirm. A fix that read the advance from the
+  destination alone was sea-tested and reverted the same day: the plotter publishes the new
+  destination one sample **before** the new bearing, so the leg baseline mixed a new waypoint with
+  an old bearing and a routine advance was misread as a leg re-origin. Solving it properly needs
+  the leg's identity tracked apart from its bearing.
+- 65340/65302 were briefly restored while chasing intermittent "no AP computer" alarms on the MFD.
+  The alarms were a SignalK event-loop stall with an unrelated cause, so both PGNs went back out
+  and the documentation stands: they are declared in `TX_PGNS` and not sent.
+
 ## [0.8.1-beta] - 2026-07-30
 
 ### Changed
