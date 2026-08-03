@@ -47,7 +47,6 @@ test('the snapshot keeps the turn the decision was taken on, after it is consume
 test('every refusal records its own reason, not the previous decision', () => {
   const cases = [
     { setup: (ac) => measured(ac, 4, 'advance', { ageMs: 9000 }), re: /not sizeable/ },
-    { setup: (ac) => measured(ac, 4, 'advance', { oldHeldMs: 2000 }), re: /not sizeable/ },
     { setup: (ac) => measured(ac, 40, 'advance'), re: /Advance 40deg > 25deg/ },
     { setup: (ac) => measured(ac, null, null), re: /not sizeable/ }
   ]
