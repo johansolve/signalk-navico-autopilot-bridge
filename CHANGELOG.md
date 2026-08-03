@@ -4,6 +4,68 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.3-beta] - 2026-08-03
+
+### Changed
+- **A waypoint advance is now taken from the destination moving, not from the course changing.**
+  Autorouting scatters waypoints evenly along straight stretches — Navionics and Orca both do it —
+  and stepping through those turns nothing at all, so a rule that required a measurable turn
+  refused precisely the legs that need no judgement. Measured under way: five destinations in six
+  minutes with `bearingTrackTrue` pinned at 150.0°, every one of them a press at the control head.
+  Six of nine refusals in nine minutes were this.
+
+- **The turn is sized from the waypoint geometry as well as the bearing, and the larger wins.**
+  Neither source is trustworthy alone. The bearing reads zero whenever the plotter publishes the
+  new destination a sample before the new bearing, which the recorded data says is the majority
+  case (56 % older, 44 % equal, never newer) — believing it would confirm a 40° turn as "0°" and
+  walk straight through the configured limit. The geometry is exact when the route steps
+  sequentially (22 of 34 legs matched the settled bearing to within 0.1°) but overstates inside a
+  burst of destination changes, where the previous destination is not the new leg's origin. Taking
+  the maximum means a real turn cannot hide behind a stale bearing, and a wrong geometry is wrong
+  in the direction of asking. Over that day's 57 destination changes: 41 automatic, 16 asked, and
+  every one of the 16 fell inside a burst.
+
+- **A bearing that arrives after the destination it belongs to is no longer mistaken for a
+  re-origin.** It is absorbed silently, but only when it lands where the geometry predicted, so an
+  MFD Restart pressed within the window cannot be answered by the preceding advance's measurement.
+  Answering a 120° swing with a measurement of "0°" is the involuntary gybe `RESTART_MAX_DEG`
+  exists to prevent.
+
+- **The 5 s settled-leg gate no longer applies to the advance path.** It was written when the turn
+  was the signal; with the destination as the signal, short legs are the ordinary case rather than
+  the suspicious one, and the gate refused an advance 3 s after the previous one for no reason
+  beyond its own arithmetic. The re-origin path keeps its copy, where a settled leg is still the
+  only evidence there is.
+
+### Added
+- The recorded auto-advance decision now carries both halves of the size — what the bearing saw,
+  what the geometry saw, and how far the destination moved — so a refusal can be explained after a
+  trip rather than reconstructed.
+
+### Known limitations
+- **The geometry can understate a turn inside a burst.** It assumes the new leg's origin is the old
+  destination. In an S-bend where two destination changes land within the bearing's update period,
+  the measurement becomes cumulative from a leg two steps back and reads low. It needs two changes
+  inside roughly a second; the bursts observed were about three seconds apart.
+- **A destination change that is not a sequential advance produces an arbitrary angle.** Switching
+  routes, a goto, or dragging the active waypoint on the plotter all move the destination without
+  advancing along a route. The angle is usually large enough to ask, but that is a property of the
+  geometry rather than a guarantee.
+- **The Course API writes the same path as the plotter.** With no priority rule for
+  `navigation.courseGreatCircle.*`, a server that also navigates through the Course API — Freeboard,
+  for instance — registers as a second writer of `nextPoint.position`. The plotter normally wins on
+  frequency, publishing at 1 Hz against the API's write-on-activation, but if the plotter falls
+  silent past the priority fallback the destination can jump. A priority rule favouring the plotter
+  closes it.
+- **A pending can still arrive with nothing to size it.** Seen once: a Restart pressed 30 m off a
+  4.9 km leg moved the bearing 0.3°, far too little to register, and the destination did not move at
+  all, so the pending found nothing and cost a press. A branch answering that case on the boat's
+  own course over ground was written, reviewed and held back from this release because it has never
+  taken a decision under way.
+- **A resend can draw "Invalid Command" from the pilot.** When the EV acts on the first write and
+  the resend goes out anyway, the pilot rejects the second one and says so on the control head. The
+  advance itself completes; the complaint is cosmetic.
+
 ## [0.8.2-beta] - 2026-08-01
 
 ### Fixed

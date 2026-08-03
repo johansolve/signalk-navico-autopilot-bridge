@@ -9,8 +9,10 @@
 > exemplarily**. Nav/Track engage from the MFD's own confirm dialog — driving the pilot
 > into Track without a separate control-head press — is **proven dockside (2026-07-05) and
 > confirmed under way**. **Multi-leg route sailing including waypoint advance was
-> sea-trialled 2026-07-15**, with optional [automatic advance](#nav-engage--confirm) of
-> small course changes. A bundled
+> sea-trialled 2026-07-15 and again 2026-08-03**, with optional
+> [automatic advance](#nav-engage--confirm) of small course changes — taken from the
+> destination moving rather than from the course changing, so closely spaced autorouted
+> waypoints no longer each cost a press. A bundled
 > [status webapp](#status-webapp) shows the live data path. See
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
@@ -425,6 +427,10 @@ the boat.
 - **Multi-leg route sailing including waypoint advance** was sea-trialled 2026-07-15;
   with [automatic advance](#nav-engage--confirm) enabled a 7° advance was auto-confirmed
   (pilot engaged in ~70 ms, unnoticed) and a 21° advance was left for a manual confirm.
+- **Destination-based advance** was sea-trialled 2026-08-03 on an autorouted route: eleven
+  decisions, ten of them automatic, and twice the geometry alone carried a step the bearing
+  read as 0°. The single manual confirm was a route change, not a waypoint step. Two MFD
+  Restarts were auto-confirmed on the same trip.
 
 > **Wind-mode course nudge on port tack is not confirmed under way.** The nudge
 > direction in wind vane mode was corrected (green `+` turns to starboard on both
@@ -458,13 +464,29 @@ route first; if it hasn't, the engage is safely rejected rather than fired blind
 
 At each waypoint of a route the pilot enters Track-pending again and waits for the same
 confirm. Under **Track waypoint advance**, set **Auto-confirm waypoint advance up to
-(degrees)** above 0 and the bridge
-confirms that automatically when the course change to the next leg is within the limit — so
-small turns sail through with no control-head press. The turn is measured from
-`navigation.courseGreatCircle.bearingTrackTrue` (the server's decode of the plotter's route
-data) at the instant the pilot goes pending; if it cannot be measured with confidence the
-advance is left for a manual confirm, and it is never confirmed against an already-engaged
-pilot. Off by default; larger turns always fall through to a manual confirm on the control head.
+(degrees)** above 0 and the bridge confirms that automatically when the course change to the
+next leg is within the limit — so small turns sail through with no control-head press. Off by
+default; larger turns always fall through to a manual confirm on the control head, and an
+advance is never confirmed against an already-engaged pilot.
+
+**What counts as an advance** is the destination moving, not the course changing.
+`navigation.courseGreatCircle.nextPoint.position` stepping to a new waypoint is the signal.
+That matters on autorouted routes, which scatter waypoints evenly along straight stretches:
+those legs turn nothing at all, and a rule that required a measurable turn refused exactly the
+waypoints that need no judgement.
+
+**How the turn is sized** is from two sources, keeping whichever reads larger. One is the
+change in `bearingTrackTrue`. The other is geometric — the bearing from the previous
+destination to the new one, which is the new leg's course and does not depend on when the
+plotter republishes anything. Neither is reliable alone. The bearing reads zero whenever the
+plotter publishes the new destination a sample ahead of the new bearing, which is the common
+case, so trusting it would let a large turn pass as "0°". The geometry overstates inside a
+burst of destination changes, where the previous destination is not the new leg's origin. The
+maximum of the two means a real turn cannot hide behind a stale bearing, and a geometry that is
+wrong errs toward asking.
+
+If neither source can size the turn against a leg change coincident with the pending, the
+advance is left for a manual confirm.
 
 ### Automatic Track restart (opt-in)
 
@@ -485,7 +507,13 @@ water where the advance limit matters most.
 Two limits stay in force whatever the setting. The turn is capped at **90°**: with the waypoint
 abaft the beam a re-origin asks for a near-reciprocal turn, which is an involuntary gybe, and
 that case is left on the control head. And the leg being re-origined must have been settled for
-at least 5 s, so a re-origin landing inside a route-activation burst is not acted on. This
+at least 5 s, so a re-origin landing inside a route-activation burst is not acted on.
+
+> A Restart pressed a long way down a leg may move the bearing too little to register as a
+> turn — 30 m off a 4.9 km leg is 0.3° — and with the destination unchanged there is nothing
+> else to size it against, so that Restart still needs a control-head press.
+
+This
 setting is **independent of the waypoint-advance limit above** — you can have every waypoint
 turn confirmed by hand and still not be asked for the restart you just pressed for. With it off,
 behaviour is exactly as it was before the setting existed. Off by default; requires `live`.
