@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.8.2-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.8.3-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
@@ -10,12 +10,18 @@
 > into Track without a separate control-head press — is **proven dockside (2026-07-05) and
 > confirmed under way**. **Multi-leg route sailing including waypoint advance was
 > sea-trialled 2026-07-15 and again 2026-08-03**, with optional
-> [automatic advance](#nav-engage--confirm) of small course changes — taken from the
-> destination moving rather than from the course changing, so closely spaced autorouted
-> waypoints no longer each cost a press. A bundled
+> [automatic advance](#nav-engage--confirm) of small course changes. A bundled
 > [status webapp](#status-webapp) shows the live data path. See
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
+
+**New in 0.8.3-beta — much improved automatic waypoint advance.** An advance is now taken
+from the *destination moving* rather than from the course changing, and the turn is sized
+from the waypoint geometry as well as the bearing, keeping whichever reads larger.
+Autorouted routes scatter waypoints along straight stretches where the course never
+changes, and those legs used to cost a control-head press each. Sea-trialled 2026-08-03:
+eleven decisions, ten of them automatic. See the [changelog](CHANGELOG.md) for the
+measurements behind that and for the known limitations.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
