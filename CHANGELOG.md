@@ -43,6 +43,26 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   it is navigating, and the not-navigating form decodes to `{latitude: null, longitude: null}`.
 
 ### Fixed
+- **A course nudge pressed just after a mode key was signed against the mode you had just left.**
+  The '+' and '−' keys are inverted in wind mode, because a native '+' turns the EV-200's bow to
+  port there, and the mode was read from a poll of the V2 autopilot API that only refreshes every
+  two seconds. On 2026-08-04 a '−' pressed 1.23 s after Auto came out of wind was inverted anyway
+  and the target heading went *up* ten degrees, twice, before the poll caught up and the same key
+  started working. The mode a key is read against now prefers the mode we just asked the pilot
+  for, until a poll returns that mode and settles it.
+
+  The window closes on the poll agreeing, not on a timestamp, because the V2 state is not
+  optimistic: it moves only when the EV-200 broadcasts its own status, so a poll issued in between
+  returns the old mode legitimately, and dating it against the keypress would hand that stale mode
+  straight back. Once the pilot has been seen in the mode the poll is authoritative again, so a
+  mode changed at the p70s is believed at once. A commanded *standby* is never preferred, and
+  neither is *route*: in both the pilot can still be physically in wind vane, where dropping the
+  inversion is the same failure with the sign reversed.
+
+  Not extended to the Tack key, where the lag is not symmetric — a tack let through early reaches
+  a pilot that may still be in auto, and the provider passes it on as a heading turn rather than a
+  wind-angle mirror. A missed keystroke is the better of the two.
+
 - **"Invalid Command" was wrongly blamed on the resend.** 0.8.2 recorded it as a known cosmetic
   effect of a resend the pilot rejects. The timing does not support that: of the nine alarms on
   2026-08-04, eight arrived 0.08–0.39 s after a destination change and eight arrived 0.07–0.12 s
@@ -51,6 +71,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   is not established here; the README says so in those terms. The 0.8.2 note is withdrawn.
 
 ### Known limitations
+- **A mode changed at the control head is still learned from the poll.** The fix above covers a
+  mode key pressed on the MFD, which is what was seen to bite. A change made at the p70s, or the
+  moment the pilot reaches Track-engaged, is only noticed when the next poll lands, so a nudge in
+  the couple of seconds after one is still signed against the previous mode. Closing that would
+  mean trusting the sniffed Raymarine status over the V2 API for the sign of every nudge, in a
+  bridge that is otherwise provider-agnostic.
+
 - **A waypoint advance can still be refused for a turn it is not making.** Sizing one from the
   waypoint geometry requires the leg's origin, and it is guessed as the destination just left.
   Inside a burst of closely spaced waypoints that guess is wrong, and wrong toward refusing: over
