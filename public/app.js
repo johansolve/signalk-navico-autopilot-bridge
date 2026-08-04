@@ -65,6 +65,47 @@ function setIdent (id, name, presence) {
   el.querySelector('.pres').textContent = silent ? 'offline' : ''
 }
 
+// Metres for anything close enough to matter at the helm, nautical miles beyond that. A leg is
+// read while deciding whether to press a button, so the unit that needs no conversion wins.
+function fmtDist (m) {
+  if (m === null || m === undefined) { return null }
+  return m < 1000 ? Math.round(m) + ' m' : (m / 1852).toFixed(2) + ' NM'
+}
+
+function fmtBrg (deg) {
+  if (deg === null || deg === undefined) { return null }
+  return String(Math.round(deg)).padStart(3, '0') + '\u00b0'
+}
+
+// The destination, its name and where it lies. Blank until something is actually navigating --
+// the plotter keeps sending 129284 with everything unavailable when it is not, and Signal K never
+// clears a path, so anything stale here would read as a live leg that does not exist.
+function renderCourse (c) {
+  if (!c || !c.branch) {
+    setV('s-route', '—'); setV('s-wp', '—'); setV('s-navsrc', 'nothing navigating')
+    return
+  }
+
+  setV('s-route', c.routeName || 'no route (single destination)', c.routeName ? '' : 'mut')
+
+  const bits = []
+  if (c.nextPointName) { bits.push(c.nextPointName) }
+  const d = fmtDist(c.distanceM)
+  const b = fmtBrg(c.bearingDeg)
+  if (d && b) { bits.push(d + ' at ' + b) } else if (d) { bits.push(d) } else if (b) { bits.push(b) }
+  setV('s-wp', bits.length ? bits.join(' \u00b7 ') : '—')
+
+  // Two live publishers means two navigators are running and the model shows whichever spoke
+  // last. That is the state behind a destination that jumps between two places, and it is
+  // invisible everywhere else in Signal K.
+  if (c.contested) {
+    setV('s-navsrc', c.writers.map(w => w.src).join(' + ') + ' \u2014 two navigators!', 'err')
+  } else {
+    const age = c.ageMs === null ? '' : ' \u00b7 ' + (c.ageMs / 1000).toFixed(1) + 's ago'
+    setV('s-navsrc', (c.source || 'unknown') + age + ' \u00b7 ' + c.branch, '')
+  }
+}
+
 function render (d) {
   const evState = d.evPilotState
   const pending = evState === 'route-pending' || d.navPending
@@ -132,6 +173,8 @@ function render (d) {
   setV('s-pending', d.navPending ? 'pending — confirm on MFD' : 'idle', d.navPending ? 'warn' : '')
   setV('s-cmds', d.cmdCount == null ? '—' : String(d.cmdCount))
   setV('s-last', d.lastEvent || '—')
+  renderCourse(d.course)
+
   const v2 = d.lastV2Result || '—'
   setV('s-v2', v2, /(^2\d\d|COMPLETED|APPLIED)/.test(v2) ? 'ok' : /(^4\d\d|^5\d\d|ERR|NO TOKEN|FAILED)/.test(v2) ? 'err' : '')
 }
