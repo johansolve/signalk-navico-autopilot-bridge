@@ -2,26 +2,27 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.8.3-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.8.4-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
 > exemplarily**. Nav/Track engage from the MFD's own confirm dialog — driving the pilot
 > into Track without a separate control-head press — is **proven dockside (2026-07-05) and
 > confirmed under way**. **Multi-leg route sailing including waypoint advance was
-> sea-trialled 2026-07-15 and again 2026-08-03**, with optional
+> sea-trialled 2026-07-15 and again on 2026-08-03 and 2026-08-04**, with optional
 > [automatic advance](#nav-engage--confirm) of small course changes. A bundled
 > [status webapp](#status-webapp) shows the live data path. See
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
-**New in 0.8.3-beta — much improved automatic waypoint advance.** An advance is now taken
-from the *destination moving* rather than from the course changing, and the turn is sized
-from the waypoint geometry as well as the bearing, keeping whichever reads larger.
-Autorouted routes scatter waypoints along straight stretches where the course never
-changes, and those legs used to cost a control-head press each. Sea-trialled 2026-08-03:
-eleven decisions, ten of them automatic. See the [changelog](CHANGELOG.md) for the
-measurements behind that and for the known limitations.
+**New in 0.8.4-beta — a Restart is seen even when the bearing barely moves.** How far a
+Restart shifts the leg bearing depends on where along the leg it is pressed, so the old
+rule missed the ones pressed close to the line — 0.94° on 2026-08-04, with cross-track
+error collapsing from 29 m to zero in the same instant. The collapse is now the signal,
+and the turn is sized from the boat's own position, which for a re-origin is exactly
+where the new leg starts. Also new: the status page shows the active route, the next
+waypoint and which source is navigating. See the [changelog](CHANGELOG.md) for the
+measurements and the known limitations.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
@@ -563,6 +564,15 @@ This is a beta; these are open:
   queue is too short. This is an **interface setting, not a plugin bug**; see
   [Empty name and serial](#empty-name-and-serial-in-the-device-list) below for the
   one-line fix.
+- **The pilot may show "Invalid Command" at a waypoint step.** Seen on roughly half the
+  advances of a day's sailing. It appears to be cosmetic, and it does not seem to come
+  from the bridge: on 2026-08-04 each of the nine alarms arrived 0.08–0.39 s after the
+  destination changed and about 100 ms *before* the pilot raised its pending, i.e. before
+  the bridge had anything to answer. The likeliest reading is that the plotter sends
+  something at the waypoint step that the EV declines, with the bridge taking no part —
+  though that has not been confirmed by sniffing the frame itself. The advance completes
+  either way. An earlier release blamed the bridge's own resend for it; that no longer
+  fits the timing.
 - **Output is via loopback HTTP** with a configured token. There is no in-process
   **V2** path for a non-provider plugin: the whole command surface lives inside the
   server's express handlers, and `app.autopilotApi` exposes only provider registration.

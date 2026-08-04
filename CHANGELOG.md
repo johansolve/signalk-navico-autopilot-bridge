@@ -4,6 +4,70 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.4-beta] - 2026-08-04
+
+### Changed
+- **A Restart is now recognised by cross-track error collapsing, not only by the bearing moving.**
+  The re-origin branch needed more than 1° of bearing movement, and how far a Restart moves the
+  bearing depends entirely on where along the leg it is pressed — nothing about the manoeuvre
+  guarantees it is measurable. It read 0.3° on a 4.9 km leg (2026-08-03) and 0.940° on
+  2026-08-04, and both cost a control-head press. Re-laying the leg from the boat is what a
+  Restart *does*, so cross-track error falling to zero is the manoeuvre itself, whatever the
+  bearing shows. Over 2026-08-04 that signature appeared exactly three times — 21.7 m, 28.9 m and
+  35.1 m, each collapsing to under half a metre — and all three were genuine, each preceded by a
+  Track-pending. The bearing rule caught two and missed the third.
+
+  The size comes from the boat's own position, which for a re-origin is the definition rather
+  than an approximation: the new leg runs from the boat to the destination it was already bound
+  for. Checked against the 2026-08-04 restart — geometry 152.200°, plotter published 152.218°.
+  The maximum of bearing and geometry governs, which is what keeps the dangerous case safe: a
+  Restart with the waypoint abaft the beam asks for a near-reciprocal turn, and if the bearing has
+  not caught up `jump` reads zero while the geometry reads 180° and `RESTART_MAX_DEG` refuses it.
+
+  Without a vessel fix the branch produces **no measurement at all** rather than falling back on
+  the bearing. `jump <= 1` is the condition for entering it, so a fallback there could only ever
+  report a sub-degree turn — auto-confirming precisely the case the geometry exists to catch.
+
+### Added
+- **The status page shows what is being navigated and by whom.** The active route name from the
+  plotter's 129285, the next waypoint with its distance and bearing, and the source publishing
+  the destination with its age. When more than one source publishes it live the row turns red and
+  names them: two navigators running at once is the state behind a destination that jumps between
+  two places, and Signal K exposes it nowhere else — the Course API tracks the owning source
+  internally as `cmdSource` but does not publish it.
+
+  Both calculation branches are read, not just the one the leg tracker follows, because the
+  plotter chooses the branch through a field in 129284 and n2k-signalk maps anything that is not
+  exactly `Great Circle` onto `courseRhumbline`, including *unavailable*. A destination must also
+  be an actual fix rather than a recent write: the plotter publishes 129284 at 1 Hz whether or not
+  it is navigating, and the not-navigating form decodes to `{latitude: null, longitude: null}`.
+
+### Fixed
+- **"Invalid Command" was wrongly blamed on the resend.** 0.8.2 recorded it as a known cosmetic
+  effect of a resend the pilot rejects. The timing does not support that: of the nine alarms on
+  2026-08-04, eight arrived 0.08–0.39 s after a destination change and eight arrived 0.07–0.12 s
+  before the pilot raised its pending — seven did both, and in every case where a pending followed
+  at all the alarm came first, i.e. before the bridge had anything to answer. What does cause it
+  is not established here; the README says so in those terms. The 0.8.2 note is withdrawn.
+
+### Known limitations
+- **A waypoint advance can still be refused for a turn it is not making.** Sizing one from the
+  waypoint geometry requires the leg's origin, and it is guessed as the destination just left.
+  Inside a burst of closely spaced waypoints that guess is wrong, and wrong toward refusing: over
+  2026-08-04's twenty destination changes it put seven over the limit, six of them falsely — five
+  inside a single ten-second burst as the route was re-activated, where no pending was raised at
+  all, and one at 10:48 that cost a control-head press (77° measured, 14.6° real).
+
+  The plotter publishes what it actually used as `previousPoint.position`, and a branch that
+  re-measured against it was written and reverted the same day. Two reasons, both worth recording.
+  The plotter does not always republish it at an advance — seven of that day's destination changes
+  had no new plotter-sourced value within four seconds, including the 10:48 one. And the freshest
+  value on the path is often not the plotter's at all but the server's own Course API, which
+  writes the boat's position there and converges onto the leg origin over about three seconds.
+  Knowing *when* that value can be trusted is the unsolved part; a timestamp cannot tell, because
+  129285 is republished at 1 Hz and an unchanged value carries a fresh stamp.
+- Everything under 0.8.3-beta still applies, except the "Invalid Command" note withdrawn above.
+
 ## [0.8.3-beta] - 2026-08-03
 
 ### Changed
@@ -62,9 +126,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   all, so the pending found nothing and cost a press. A branch answering that case on the boat's
   own course over ground was written, reviewed and held back from this release because it has never
   taken a decision under way.
-- **A resend can draw "Invalid Command" from the pilot.** When the EV acts on the first write and
-  the resend goes out anyway, the pilot rejects the second one and says so on the control head. The
-  advance itself completes; the complaint is cosmetic.
+- ~~**A resend can draw "Invalid Command" from the pilot.**~~ Withdrawn in 0.8.4-beta: the alarm
+  arrives before the pilot raises its pending, so the bridge cannot be its cause. See that entry.
 
 ## [0.8.2-beta] - 2026-08-01
 
