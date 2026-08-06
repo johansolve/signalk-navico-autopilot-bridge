@@ -204,23 +204,36 @@ Selector-`0x0a` status word is a per-mode bitfield — ground truth `nac3-wind` 
   (`41,9f,00,1d,81,00,00,00` / `…80…`) that drives the MFD's displayed mode label.
   `htool-guess`
 
-### 3.3 PGN 65340 / 65302 — pilot state — NOT SENT (dropped 2026-07-22)
+### 3.3 PGN 65340 / 65302 — pilot state (1 Hz)
 
-> **The NAC-3 emits neither 65340 nor 65302, in any mode** (`nac3-nav`: zero
-> frames from any source). The **AC42 does emit 65340** (`ac42-comm`), which is why
-> the bridge — emulating an AC42 — used to send both, at 1 Hz.
+> **The NAC-3 emits neither 65340 nor 65302, in any mode** (`nac3-nav`: zero frames
+> from any source). **A real AC42 emits both**, from src 13 in `ac42-comm` — 65340 as
+> the pilot-state frame tabled below, 65302 as a single 32-bit value report
+> (`41 9f 0a 2b 00 00 00 ff`). The bridge emulates an AC42, so it sends both, at 1 Hz.
 >
-> **Dockside test 2026-07-22: both suppressed. The MFD still bound, and the mode
-> label still tracked every state change (standby → auto → wind → nav).** So the
-> frames earned nothing — most of the table below was `htool-guess` — and the bridge
-> no longer sends them. `TX_PGNS` still *declares* both, as a real AC does; only the
-> transmission is gone, which keeps the declared capability list untouched (the test
-> deliberately changed one variable, so a binding failure would have pointed at the
-> declared list rather than at the frames).
+> **Dropped 2026-07-22, restored 2026-08-06.** The dockside test that dropped them
+> suppressed both and found the MFD still bound and the mode label still tracking every
+> state change (standby → auto → wind → nav). That test stands — but "an already-bound
+> plotter does not need them" is a narrower result than "nothing needs them", and it
+> was doing double duty as the second. Looking like the device you claim to be is
+> reason enough for two frames a second.
 >
-> The tables are kept below as reverse-engineering reference, not as bridge output.
+> **This is not a fix for the first-commissioning reports, and must not be read as
+> one.** Issue #1 was filed 2026-07-18, four days *before* the drop, against
+> 0.7.0-beta (npm, 2026-07-15) — a build that sent both. That plotter failed with the
+> frames on the wire, and failed again on 0.7.3-beta without them. The transmit set is
+> now byte-identical to 0.7.0-beta, i.e. exactly what it already failed on. Whatever
+> the Vulcan 9 and the Triton² are missing, it is not these.
+>
+> Restored **unchanged**, not corrected to ground truth. The capture has AC42 standby
+> at `41 9f 0a 2b …` where the shipped htool row says `0a 6b`, and the 65302 route row
+> is htool's own explicit guess — but these exact bytes ran on the reference rig from
+> 0.1.0 through 0.7.0-beta, and correcting values while re-enabling transmission in one
+> step would leave nothing to attribute a new symptom to. Fix the bytes separately, if
+> a capture ever justifies it. They have **not** run against the 0.8.x Track-pending
+> logic — the one thing to watch on the next Track sea trial.
 
-65340 Pilot State (former bridge constants):
+65340 Pilot State:
 
 | mode | frame | source |
 |---|---|---|
@@ -229,7 +242,7 @@ Selector-`0x0a` status word is a per-mode bitfield — ground truth `nac3-wind` 
 | wind | `41 9f 10 03 fe fa 00 80` | `htool-guess` |
 | route | `41 9f 10 06 fe f8 00 80` | `htool-guess` |
 
-65302 (former bridge constants, all effectively `htool-guess`): standby
+65302 (all effectively `htool-guess`): standby
 `41 9f 0a 6b 00 00 00 ff`, auto `41 9f 0a 69 00 00 28 ff`, wind
 `41 9f 0a 69 00 00 30 ff`, route `41 9f 0a 6b 00 00 28 ff`.
 

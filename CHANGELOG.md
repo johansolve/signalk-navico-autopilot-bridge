@@ -4,9 +4,32 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.4-beta] - 2026-08-04
+## [0.8.4-beta] - 2026-08-06
 
 ### Changed
+- **The `65340` and `65302` pilot-state frames are sent again.** They were dropped on
+  2026-07-22 after a dockside test suppressed both and found the MFD still binding and the
+  mode label still tracking every state change. That result stands, but it was carrying more
+  weight than it can: the plotter had been commissioned months earlier, so what was measured
+  is that an *already bound* MFD does not need them. A real AC42 emits both — `65340` as the
+  pilot-state frame and `65302` as a single 32-bit value report, both from src 13 in the
+  commissioning capture — and looking like the device the emulator claims to be is reason
+  enough for two frames a second.
+
+  **This is not a fix for the two users stuck at a first commissioning, and should not be
+  offered as one.** Issue #1 was filed four days *before* the drop, against 0.7.0-beta, which
+  sent both frames: that plotter failed with them on the wire and failed again without them on
+  0.7.3-beta. The transmit set is now byte-identical to 0.7.0-beta, so anyone who has already
+  failed on that build has no reason to expect a different outcome. Their symptom — the AC
+  listed and selectable but never accepted as a live pilot — is still unexplained.
+
+  Restored unchanged rather than corrected. The capture puts AC42 standby at `41 9f 0a 2b …`
+  where the shipped htool row says `0a 6b`, and the `65302` route row remains htool's own
+  explicit guess; correcting values and re-enabling transmission in one step would leave
+  nothing to attribute a new symptom to. These bytes ran on the reference rig from 0.1.0
+  through 0.7.0-beta, but they have not run against the 0.8.x Track-pending logic, which is
+  the one thing to watch on the next Track sea trial.
+
 - **A Restart is now recognised by cross-track error collapsing, not only by the bearing moving.**
   The re-origin branch needed more than 1° of bearing movement, and how far a Restart moves the
   bearing depends entirely on where along the leg it is pressed — nothing about the manoeuvre

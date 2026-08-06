@@ -21,8 +21,10 @@ rule missed the ones pressed close to the line — 0.94° on 2026-08-04, with cr
 error collapsing from 29 m to zero in the same instant. The collapse is now the signal,
 and the turn is sized from the boat's own position, which for a re-origin is exactly
 where the new leg starts. Also new: the status page shows the active route, the next
-waypoint and which source is navigating. See the [changelog](CHANGELOG.md) for the
-measurements and the known limitations.
+waypoint and which source is navigating. The `65340` and `65302` pilot-state frames a
+real AC42 emits are back on the bus after two weeks off — a fidelity change that alters
+what the plugin transmits, not a fix for anything reported. See the
+[changelog](CHANGELOG.md) for the measurements and the known limitations.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
@@ -113,9 +115,10 @@ ranked below a live pilot and never selected, and the commissioning "press
 standby" gate is satisfied by the AC's *own* continuous state broadcast. This
 plugin reproduces that broadcast (byte templates taken verbatim from a real AC42 in
 `canboat/samples/ac42-commissioning.raw`), which is what makes the MFD bind to it and
-unlock the control view. Not every frame a real AC42 sends turned out to be needed:
-`65340` and `65302` were dropped in testing without costing the binding or the mode
-display, so the emitted set is the *verified* subset, not the full one.
+unlock the control view. `65340`/`65302` were dropped for two weeks after a dockside
+test found them costing neither the binding nor the mode display on an already-bound
+plotter; they are sent again because a real AC42 emits both, which is the whole premise
+of emulating one.
 
 The emulator runs as a **second N2K device** on the bus (its own address claim,
 default address 35), alongside the SignalK server's own canboat connection and any
@@ -384,9 +387,8 @@ The MFD's displayed mode is driven by the firehose, not by the button press: the
 plugin sends per-mode `65305` frames plus a mode-change announce, and the overlay
 followed standby/auto/wind/route correctly on the sea trials. The `65305` and `65341`
 frames for auto/wind/route are pinned to real NAC-3 captures (ground truth). The
-`65340`/`65302` frames were htool guesses and are **no longer sent** — a dockside test
-(2026-07-22) confirmed the MFD binds and the mode label still tracks every state change
-without them. Per-mode byte values and source tags are in
+`65340`/`65302` frames are largely htool guesses but are sent anyway, because a real
+AC42 emits both. Per-mode byte values and source tags are in
 [PROTOCOL-REFERENCE §3](PROTOCOL-REFERENCE.md).
 
 ### Set heading (127237)
