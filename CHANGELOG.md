@@ -26,25 +26,42 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   No MFD can classify that as an autopilot computer. It still listed the device and still let
   it be picked as a source, because product info travels in `126996` and nothing injects
   `fields` on that one, which is exactly why this looked like *the AC is on the bus but is
-  never accepted as a live pilot*: `Manufacturer: Unknown` and `Instance: 255` in the device
-  entry, an `(Invalid)` suffix on the source, `Pilot Present 0.00` on a Triton, and no
-  commissioning offered at all. The claim now carries both shapes — `fields` for 3.x, the
-  top-level names for 2.x, which 3.x ignores when `fields` is present.
+  never accepted as a live pilot*: an `(Invalid)` suffix on the source, `Pilot Present 0.00`
+  on a Triton, and no commissioning offered at all. A device entry reporting an unknown
+  manufacturer and instance 255 follows from the same sentinels.
 
-  The emulated commissioning control head had the identical claim and the identical failure,
-  and is fixed the same way.
+  **No one object works on every version, so the encoder is probed and the right shape used.**
+  Carrying both — the obvious fix, and what was tried first — is not safe: 2.x does not ignore
+  a `fields` key it does not understand, it is broken by its presence and encodes
+  `ff ff ff ff ff ff ff ff`, i.e. a claim with no unique number either, which is worse than the
+  bug being fixed. Nor can the right shape be decided from the plugin's own dependencies, since
+  the copy actually resolved may be the host server's. So at startup a probe claim only a
+  fields-aware `toPgn` can satisfy is encoded and Device Function read back out of byte 5;
+  `150` picks the nested shape, `0xff` the top-level one. Both encode to the identical eight
+  bytes on the version that accepts them, which is the whole point.
+
+  The emulated commissioning control head is built the same way and had the same defect, with
+  its own identity (B&G, Mode Controller). It is fixed identically. Nobody has reported it,
+  because it only transmits when `enableCommissioningHead` is on.
 
   This is the explanation that had been missing from issue #1 since 18 July. It also means the
-  two things offered in the meantime were, for that user, noise: the `txqueuelen` warning added
-  in 0.7.3-beta (their queue was 10 and raising it changed nothing) and restoring `65340` /
-  `65302` in 0.8.4-beta. Both remain right in their own terms; neither was the fault. The
-  reference boat's Vulcan 7 was claiming the same blanked identity the whole time and binding
-  regardless, having been commissioned months earlier and evidently never re-classifying the
-  device — which is why nothing here ever showed it.
+  two things offered in the meantime were noise for the user who reported it: the `txqueuelen`
+  warning added in 0.7.3-beta — their queue was 10, but they got it working without ever
+  raising it — and restoring `65340` / `65302` in 0.8.4-beta. Both remain right in their own
+  terms; neither was the fault. (Raising the queue *was* measured to change nothing for the
+  second user stuck at a first commissioning, whose case is still open.)
+
+  The reference boat never had the bug, which is why nothing here ever showed it — and not for
+  the reason first assumed. Its plugin resolves canboatjs **2.10.0** out of
+  `~/.signalk/node_modules`, not the 3.20.0 the server itself carries, because Node resolves
+  upward from the plugin directory and stops at the first copy it finds. Its AC has been
+  claiming `e1 b9 3a e8 00 96 51 c0` all along. Verified on the bus with `candump` across a
+  restart, before and after this change, on both the top-level and the probed build.
 
   Diagnosed and patched by Dominik Röttsches (@drott) in
   [#3](https://github.com/johansolve/signalk-navico-autopilot-bridge/pull/3), fixing
-  [#1](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/1).
+  [#1](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/1). The
+  version-probing on top of it came out of testing that patch against a 2.10 host.
 
 ## [0.8.4-beta] - 2026-08-06
 
