@@ -63,6 +63,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   [#1](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/1). The
   version-probing on top of it came out of testing that patch against a 2.10 host.
 
+- **The advertised Software Version Code was canboatjs' own version on 2.x hosts.** Its
+  `CanDevice` assigns its package version over a caller-supplied product info's
+  `Software Version Code`, unconditionally, and 3.x dropped the assignment. So the AC
+  advertised `1100` — what `PROTOCOL-REFERENCE.md` documents a real AC42 as sending — on
+  every 3.x host, and `2.10.0` on the reference boat, with the control head differing the
+  same way. Measured against the real `CanDevice`, not inferred.
+
+  Found while auditing the rest of the plugin for the same class of bug as the address
+  claim, and it is the same shape of problem: a difference that only appears on the
+  canboatjs version the development rig happens to run, i.e. the one place a wrong
+  identity can never be noticed. It also narrows what *the transmit set is byte-identical
+  to 0.7.0-beta* covers — that is the actisense-string path, and `126996` is not on it.
+  Whether any MFD reads the field is untested; matching the documented identity costs
+  nothing either way.
+
 ## [0.8.4-beta] - 2026-08-06
 
 ### Changed
