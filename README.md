@@ -420,8 +420,14 @@ Heading Reference = Magnetic), so the MFD shows the set heading. A real AC
 re-broadcasts this; without it the MFD shows "- - -". It is sent at **5 Hz**
 because the boat's other devices broadcast `127237` with an *empty*
 Heading-To-Steer at 10–20 Hz, which otherwise blanks the value and makes the
-display flicker. The value is `steering.autopilot.target.headingMagnetic` (the
-locked heading), falling back to `navigation.headingMagnetic`. It is sent as
+display flicker. The value is the pilot's own setpoint, read from whichever shape
+its provider publishes: the Autopilot V2 `steering.autopilot.target` while the
+engaged mode makes that a heading (auto or route), else the V1
+`steering.autopilot.target.headingMagnetic`, falling back to
+`navigation.headingMagnetic`. Reading only the V1 sub-path is what left a
+V2-only provider showing "- - -" on the MFD
+([#10](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/10)).
+It is sent as
 Magnetic; the MFD converts to its configured heading reference (e.g. True) using
 the bus magnetic variation, so set the MFD's heading units to match the rest of
 the boat.

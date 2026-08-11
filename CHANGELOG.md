@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **A V2-only pilot showed "Set Heading - - -" on the plotter despite being engaged.**
+  V1 splits the setpoint by kind — `target.headingMagnetic` / `target.windAngleApparent` —
+  and those were the only paths the bridge read. V2 instead has one
+  `steering.autopilot.target`, meaning whatever the engaged mode says: a heading in
+  auto/route, a wind angle in wind. A V2-only provider was therefore invisible everywhere
+  the bridge needs a setpoint (`windTargetRad()`, the nav-pending `65341`,
+  `send127237()`). ([#10](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/10))
+
+  `apTargetRad(kind)` now reads the V2 target, but only when the polled V2 mode makes it
+  mean the `kind` asked for — read blind, a wind angle would reach the MFD as a heading.
+  V1 stays the fallback, so a V1-only pilot is unchanged.
+
 ## [0.9.0-beta] - 2026-08-11
 
 Ways the plugin could fail on a server configured differently from the one it was developed
