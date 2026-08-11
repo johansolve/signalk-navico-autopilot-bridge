@@ -4,6 +4,48 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.5-beta] - 2026-08-11
+
+### Fixed
+- **The address claim went on the bus with every field but the unique number blanked, on
+  hosts bundling canboatjs 3.19 or newer.** The claim was built with its fields at the top
+  level (`'Manufacturer Code'`, `'Device Function'`, …), a shape every version of `toPgn`
+  encodes correctly on its own. What changed in 3.19 is upstream of the encoder:
+  `n2kDevice` takes a caller-supplied `addressClaim` verbatim, creates a nested `fields`
+  object on it and migrates **exactly one** key into it — `uniqueNumber` — and `toPgn` then
+  encodes from `fields` alone. Every remaining top-level key was dropped and went out as its
+  not-available sentinel. Encoded against 3.20.0, the claim read
+
+  ```
+  e1 b9 fa ff ff ff ff ff   instead of   e1 b9 3a e8 00 96 51 c0
+  ```
+
+  — manufacturer 2047, device function 255, device class 127, instance 255 in place of Simrad,
+  Autopilot, Steering and Control surfaces.
+
+  No MFD can classify that as an autopilot computer. It still listed the device and still let
+  it be picked as a source, because product info travels in `126996` and nothing injects
+  `fields` on that one, which is exactly why this looked like *the AC is on the bus but is
+  never accepted as a live pilot*: `Manufacturer: Unknown` and `Instance: 255` in the device
+  entry, an `(Invalid)` suffix on the source, `Pilot Present 0.00` on a Triton, and no
+  commissioning offered at all. The claim now carries both shapes — `fields` for 3.x, the
+  top-level names for 2.x, which 3.x ignores when `fields` is present.
+
+  The emulated commissioning control head had the identical claim and the identical failure,
+  and is fixed the same way.
+
+  This is the explanation that had been missing from issue #1 since 18 July. It also means the
+  two things offered in the meantime were, for that user, noise: the `txqueuelen` warning added
+  in 0.7.3-beta (their queue was 10 and raising it changed nothing) and restoring `65340` /
+  `65302` in 0.8.4-beta. Both remain right in their own terms; neither was the fault. The
+  reference boat's Vulcan 7 was claiming the same blanked identity the whole time and binding
+  regardless, having been commissioned months earlier and evidently never re-classifying the
+  device — which is why nothing here ever showed it.
+
+  Diagnosed and patched by Dominik Röttsches (@drott) in
+  [#3](https://github.com/johansolve/signalk-navico-autopilot-bridge/pull/3), fixing
+  [#1](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/1).
+
 ## [0.8.4-beta] - 2026-08-06
 
 ### Changed

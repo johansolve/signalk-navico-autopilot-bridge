@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.8.4-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.8.5-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
@@ -15,16 +15,16 @@
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
-**New in 0.8.4-beta — a Restart is seen even when the bearing barely moves.** How far a
-Restart shifts the leg bearing depends on where along the leg it is pressed, so the old
-rule missed the ones pressed close to the line — 0.94° on 2026-08-04, with cross-track
-error collapsing from 29 m to zero in the same instant. The collapse is now the signal,
-and the turn is sized from the boat's own position, which for a re-origin is exactly
-where the new leg starts. Also new: the status page shows the active route, the next
-waypoint and which source is navigating. The `65340` and `65302` pilot-state frames a
-real AC42 emits are back on the bus after two weeks off — a fidelity change that alters
-what the plugin transmits, not a fix for anything reported. See the
-[changelog](CHANGELOG.md) for the measurements and the known limitations.
+**New in 0.8.5-beta — the emulator finally claims a valid identity. Upgrade if your MFD
+listed the AC but never accepted it as a pilot.** On any host bundling canboatjs 3.19 or
+newer, the address claim went out with everything except the unique number blanked to its
+"not available" value: manufacturer 2047, device function 255, device class 127. Product
+info was unaffected, so the device appeared in the device list and could be selected as a
+source — and could never be classified as an autopilot computer. That accounts for
+`Pilot Present 0.00` on a Triton and "no autopilot computer" on a Vulcan. Diagnosed and
+patched by [@drott](https://github.com/drott). If you are running any earlier release on a
+current SignalK, this is worth the upgrade on its own. See the
+[changelog](CHANGELOG.md) for the mechanism and the wire bytes.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
@@ -583,6 +583,23 @@ This is a beta; these are open:
   the bridge does not take that route.)
 
 ## Troubleshooting
+
+### Listed and selectable, but never accepted as a live pilot
+
+If the emulated AC shows up in the device list and can be picked as a source, yet no
+autopilot page appears, no commissioning is offered, or a Triton's data list shows
+`Pilot Present 0.00` — **upgrade to 0.8.5-beta or newer**. Expect the device entry to
+misreport the manufacturer and the instance as well: whatever your display shows for an
+unknown maker, and instance 255.
+
+Before that release the address claim was built with its fields at the top level of the
+object handed to canboatjs. That shape is encoded correctly by every version on its own —
+what broke was that from **canboatjs 3.19** the address-claim path moves a claim's values
+into a nested `fields` object first and carries only the unique number across, so
+everything else went on the wire as "not available": manufacturer 2047, device function
+255, device class 127. Product info was unaffected, which is why the device was visible and
+selectable the whole time — but nothing could classify it as an autopilot computer. See the
+0.8.5-beta entry in [CHANGELOG.md](CHANGELOG.md) for the full mechanism.
 
 ### Empty name and serial in the device list
 
