@@ -374,9 +374,11 @@ module.exports = function (app) {
         head = new ControlHead(app, {
           canInterface: o.canInterface || 'can0',
           headAddress: (typeof o.headAddress === 'number') ? o.headAddress : 44,
-          acAddress: (typeof o.preferredAddress === 'number') ? o.preferredAddress : 35
+          acAddress: (typeof o.preferredAddress === 'number') ? o.preferredAddress : 35,
+          acAddrFn: () => (emulator ? emulator.myAddr() : null)
         })
         head.start()
+        emulator.setCommissioningHead(head)
       }
       app.setPluginStatus('Starting Simrad ' + (o.acModel || 'AC42') +
         ' emulator on ' + (o.canInterface || 'can0') +

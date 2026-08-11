@@ -8,75 +8,104 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 - **The address claim went on the bus with every field but the unique number blanked, on
-  hosts bundling canboatjs 3.19 or newer.** The claim was built with its fields at the top
-  level (`'Manufacturer Code'`, `'Device Function'`, …), a shape every version of `toPgn`
-  encodes correctly on its own. What changed in 3.19 is upstream of the encoder:
-  `n2kDevice` takes a caller-supplied `addressClaim` verbatim, creates a nested `fields`
-  object on it and migrates **exactly one** key into it — `uniqueNumber` — and `toPgn` then
-  encodes from `fields` alone. Every remaining top-level key was dropped and went out as its
-  not-available sentinel. Encoded against 3.20.0, the claim read
+  hosts that resolve canboatjs 3.19 or newer.** Which copy gets resolved is what counts,
+  and it need not be the one the server bundles: Node resolves upward from the plugin
+  directory and stops at the first `@canboat/canboatjs` it finds.
+
+  The claim was built with its fields at the top level (`'Manufacturer Code'`,
+  `'Device Function'`, …), a shape every version of `toPgn` encodes correctly on its own.
+  What changed in 3.19 sits upstream of the encoder: `n2kDevice` takes a caller-supplied
+  `addressClaim` verbatim, creates a nested `fields` object on it and migrates **exactly
+  one** key into it — `uniqueNumber` — after which `toPgn` encodes from `fields` alone.
+  Every remaining top-level key went out as its not-available sentinel:
 
   ```
   e1 b9 fa ff ff ff ff ff   instead of   e1 b9 3a e8 00 96 51 c0
   ```
 
-  — manufacturer 2047, device function 255, device class 127, instance 255 in place of Simrad,
-  Autopilot, Steering and Control surfaces.
+  — manufacturer 2047, device function 255, device class 127, instance 255 in place of
+  Simrad, Autopilot, Steering and Control surfaces.
 
-  No MFD can classify that as an autopilot computer. It still listed the device and still let
-  it be picked as a source, because product info travels in `126996` and nothing injects
-  `fields` on that one, which is exactly why this looked like *the AC is on the bus but is
-  never accepted as a live pilot*: an `(Invalid)` suffix on the source, `Pilot Present 0.00`
-  on a Triton, and no commissioning offered at all. A device entry reporting an unknown
-  manufacturer and instance 255 follows from the same sentinels.
+  Nothing can classify that as an autopilot computer, and neither of the two displays that
+  met it — a Vulcan 9 and a Triton² — ever did. The device still listed and could still be
+  picked as a source, because product info travels in `126996` and nothing injects `fields`
+  there, which is exactly why this presented as *the AC is on the bus but is never accepted
+  as a live pilot*: an `(Invalid)` suffix on the source, `Pilot Present 0.00` on the Triton,
+  and no commissioning offered at all.
 
-  **No one object works on every version, so the encoder is probed and the right shape used.**
-  Carrying both — the obvious fix, and what was tried first — is not safe: 2.x does not ignore
-  a `fields` key it does not understand, it is broken by its presence and encodes
-  `ff ff ff ff ff ff ff ff`, i.e. a claim with no unique number either, which is worse than the
-  bug being fixed. Nor can the right shape be decided from the plugin's own dependencies, since
-  the copy actually resolved may be the host server's. So at startup a probe claim only a
-  fields-aware `toPgn` can satisfy is encoded and Device Function read back out of byte 5;
-  `150` picks the nested shape, `0xff` the top-level one. Both encode to the identical eight
-  bytes on the version that accepts them, which is the whole point.
+  **No one object works on every version, so the encoder is probed and the right shape
+  used.** Carrying both is not safe: 2.x does not ignore a `fields` key it does not
+  understand, it is broken by its presence and encodes `ff ff ff ff ff ff ff ff` — a claim
+  without even a unique number, worse than the bug being fixed. Nor can the right shape be
+  read off the plugin's own dependencies, since the resolved copy may be the server's. So a
+  claim only a fields-aware `toPgn` can satisfy is encoded at startup and Device Function
+  and Device Class read back out of it; the class masked, without its reserved bit, so that
+  an encoder which stopped setting a bit that is not ours to depend on could not silently
+  send the plugin back to the broken shape. The chosen shape is logged at every start.
 
-  The emulated commissioning control head is built the same way and had the same defect, with
-  its own identity (B&G, Mode Controller). It is fixed identically. Nobody has reported it,
-  because it only transmits when `enableCommissioningHead` is on.
+  The emulated commissioning control head is built the same way, had the same defect and is
+  fixed identically. Nobody reported that one: it only transmits when
+  `enableCommissioningHead` is on.
 
-  This is the explanation that had been missing from issue #1 since 18 July. It also means the
-  two things offered in the meantime were noise for the user who reported it: the `txqueuelen`
-  warning added in 0.7.3-beta — their queue was 10, but they got it working without ever
-  raising it — and restoring `65340` / `65302` in 0.8.4-beta. Both remain right in their own
-  terms; neither was the fault. (Raising the queue *was* measured to change nothing for the
-  second user stuck at a first commissioning, whose case is still open.)
+  This is the explanation that had been missing from issue #1 since 18 July, and it means
+  the two things offered in the meantime were not the fault. The `txqueuelen` warning added
+  in 0.7.3-beta stands on its own — but the reporter's queue was 10 and he got it working
+  without ever raising it, and for the second user stuck at a first commissioning raising it
+  filled in the missing name and serial without making the plotter bind. Restoring `65340` /
+  `65302` in 0.8.4-beta likewise stands as fidelity and fixed nothing here.
 
-  The reference boat never had the bug, which is why nothing here ever showed it — and not for
-  the reason first assumed. Its plugin resolves canboatjs **2.10.0** out of
-  `~/.signalk/node_modules`, not the 3.20.0 the server itself carries, because Node resolves
-  upward from the plugin directory and stops at the first copy it finds. Its AC has been
-  claiming `e1 b9 3a e8 00 96 51 c0` all along. Verified on the bus with `candump` across a
-  restart, before and after this change, on both the top-level and the probed build.
+  The reference boat never had the bug, which is why nothing here ever showed it: its plugin
+  resolves canboatjs **2.10.0** out of `~/.signalk/node_modules`, not the 3.20.0 the server
+  itself carries. Its AC has been claiming `e1 b9 3a e8 00 96 51 c0` all along, verified on
+  the bus with `candump` across a restart, before and after this change.
 
   Diagnosed and patched by Dominik Röttsches (@drott) in
   [#3](https://github.com/johansolve/signalk-navico-autopilot-bridge/pull/3), fixing
   [#1](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/1). The
   version-probing on top of it came out of testing that patch against a 2.10 host.
 
-- **The advertised Software Version Code was canboatjs' own version on 2.x hosts.** Its
-  `CanDevice` assigns its package version over a caller-supplied product info's
-  `Software Version Code`, unconditionally, and 3.x dropped the assignment. So the AC
-  advertised `1100` — what `PROTOCOL-REFERENCE.md` documents a real AC42 as sending — on
-  every 3.x host, and `2.10.0` on the reference boat, with the control head differing the
-  same way. Measured against the real `CanDevice`, not inferred.
+- **The advertised Software Version Code was canboatjs' own version number.** From 2.7.0
+  through 3.16.4, `CanDevice` assigns its package version over a caller-supplied product
+  info's `Software Version Code`, unconditionally; 2.0–2.6 never did and 3.17.0 dropped it
+  again. So the AC advertised `1100` — what `PROTOCOL-REFERENCE.md` documents a real AC42 as
+  sending — only on 3.17 and newer, and its own canboatjs version everywhere else, with the
+  control head differing the same way. Measured against the real `CanDevice`, not inferred.
 
-  Found while auditing the rest of the plugin for the same class of bug as the address
-  claim, and it is the same shape of problem: a difference that only appears on the
-  canboatjs version the development rig happens to run, i.e. the one place a wrong
-  identity can never be noticed. It also narrows what *the transmit set is byte-identical
-  to 0.7.0-beta* covers — that is the actisense-string path, and `126996` is not on it.
   Whether any MFD reads the field is untested; matching the documented identity costs
-  nothing either way.
+  nothing either way. It does narrow what *the transmit set is byte-identical to 0.7.0-beta*
+  covers, though: that is the actisense-string path, and `126996` is not on it.
+
+- **A commissioning head that could not get its configured address would have steered the
+  pilot.** `isOwnSrc` excluded the head's *configured* address, 44 by default, while
+  canboatjs moves a device off the address it asked for when that address is already claimed
+  or when it loses the NAME arbitration for it. The head sends a genuine AP-group standby to
+  the AC every 2 s to hold the MFD's gate open, so once moved, its own traffic would have
+  decoded as a real keypress and dropped the pilot to standby every other second for as long
+  as commissioning mode was on — the exact failure the filter was added for in 0.7.3-beta.
+  The emulator now asks the head where it actually is, and keeps excluding the configured
+  address as well: excluding one the head has left can at worst ignore another device's
+  keypresses, while missing the head's own traffic un-steers the boat.
+
+  The head had the mirror image of the same bug: it addressed its standby at the AC's
+  *configured* address, so a moved AC meant the commissioning gate simply never opened. It
+  now asks the emulator where it is.
+
+  Both need `enableCommissioningHead` and an address collision, so neither has been seen in
+  the field. Found by review.
+
+### Documentation
+- `PROTOCOL-REFERENCE.md` said the AC sends no `126993` / `126998` / `126464`. That is about
+  the **real** AC42, and the three do not rest on the same evidence — the commissioning
+  capture covers the heartbeat and `126998`, while `126464` rests on the firmware analysis.
+  The emulator itself is not identical to it: canboatjs sends a `126993` heartbeat on a
+  timer and answers an ISO request for `126464`, on 2.x and 3.x alike. Only `126998` really
+  is absent.
+- Also documented there: the `126464` reply is not a statement about what this emulator
+  sends. The plugin does not set `disableDefaultTransmitPGNs`, so canboatjs unions
+  `TX_PGNS` with its own device and default lists, and the reply advertises **38 PGNs of
+  which 24 are never transmitted** with the shipped defaults.
+- Two source tags added, `code` and `issue-1`, for assertions that come from reading source
+  or from user reports rather than from a bus capture.
 
 ## [0.8.4-beta] - 2026-08-06
 

@@ -19,6 +19,8 @@ reverse-engineered from bus captures. Autopilot control is **Simnet**, not Navio
 | `ac42-comm` | Kees' AC42 commissioning capture `ac42-commissioning.raw` (src 13) |
 | `merrimac` | Kees' `candump/AUTOPILOT_CONTROL.md` (merrimac-rs, a *different* MFD dialect) |
 | `htool-guess` | inherited from htool/RaymarineAPtoFakeNavicoAutoPilot, unverified |
+| `code` | read out of canboatjs / this plugin's own source, not off a bus |
+| `issue-1` | reported by a user on issue #1 (a Vulcan 9 and a Triton²) |
 
 > **Kees' raw candumps are unfiltered — never commit `nac3_wind.raw`,
 > `nac3_nav_mode.raw`, or `AUTOPILOT_CONTROL.md` into any repo without his ok.**
@@ -37,7 +39,33 @@ reverse-engineered from bus captures. Autopilot control is **Simnet**, not Navio
   130850 command (see below).
 - NAME template `0xC0509600E8200000` (devFunc 150, devClass 40, IndustryGroup 4,
   mfr 1857, arbitrary-address-capable). Product model `"AC42"` / `"AC12"`, SW
-  `"1100"`. The AC does **not** send 126993/126998/126464. `ac42-comm`
+  `"1100"`. The real AC42 sends no **126993** heartbeat and no **126998**
+  `ac42-comm`; for **126464** the evidence is the firmware, not the capture — no
+  literals for it in the image (`n2k_research SUBSYS-can-nmea2000 §5.6`).
+- **The emulator is not identical to that, and the difference comes from canboatjs
+  rather than from this code.** Its `CanDevice` sends a **126993** heartbeat on a
+  60 s timer and answers an ISO request for **126464** with its transmit list, on
+  2.x and 3.x alike. Only **126998** really is absent, and on 3.x not for the reason
+  2.x makes it absent: up to 3.16 it is built from a `serverUrl` / `serverVersion` this
+  plugin does not pass, and from 3.17 from `app.config` — which is missing because the
+  plugin hands `Canbus` a bare `EventEmitter` as its `app`. Nothing has ever suggested
+  an MFD objects to the two extra PGNs, but the line above describes the real AC42, not
+  what goes on the wire here. `code`
+- The address claim is handed to canboatjs in the shape the resolved version
+  encodes, chosen by probing the encoder at startup — see `pickAddressClaim` in
+  `lib/canboat-compat.js`. Getting this wrong is silent and total: from canboatjs
+  3.19 a top-level claim reaches the bus as `e1 b9 fa ff ff ff ff ff` (manufacturer
+  2047, device function 255, device class 127) `code`. The device still lists and can
+  still be selected as a source, and neither display that has met it — a Vulcan 9 and a
+  Triton² — ever accepted it as a live pilot. `issue-1`
+- **The transmit list is not a statement about what this emulator sends.** The
+  plugin does not set `disableDefaultTransmitPGNs`, so canboatjs unions `TX_PGNS`
+  with its own device and default lists: the 126464 reply advertises **38 PGNs, of
+  which 24 are never transmitted** with the shipped defaults. Those are canboatjs'
+  own defaults (127488, 129025, 130306 …), **130851** — the AC's command reply, which
+  `TX_PGNS` declares for identity and the emulator does not implement — and 127245 /
+  127250, which only go out with `enableStdPgns` on. Nothing has ever asked for any of
+  them. `code`
 
 ---
 

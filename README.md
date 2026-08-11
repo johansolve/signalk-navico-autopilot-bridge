@@ -16,11 +16,13 @@
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
 **New in 0.8.5-beta — the emulator finally claims a valid identity. Upgrade if your MFD
-listed the AC but never accepted it as a pilot.** On any host bundling canboatjs 3.19 or
-newer, the address claim went out with everything except the unique number blanked to its
-"not available" value: manufacturer 2047, device function 255, device class 127. Product
-info was unaffected, so the device appeared in the device list and could be selected as a
-source — and could never be classified as an autopilot computer. That accounts for
+listed the AC but never accepted it as a pilot.** Wherever the plugin resolves canboatjs
+3.19 or newer — which is not necessarily the copy your server bundles, see the
+[changelog](CHANGELOG.md) — the address claim went out with everything except the unique
+number blanked to its "not available" value: manufacturer 2047, device function 255,
+device class 127. Product info was unaffected, so the device appeared in the device list
+and could be selected as a source — and could not be classified as an autopilot computer.
+That accounts for
 `Pilot Present 0.00` on a Triton and "no autopilot computer" on a Vulcan. Diagnosed and
 patched by [@drott](https://github.com/drott). If you are running any earlier release on a
 current SignalK, this is worth the upgrade on its own. See the
@@ -598,7 +600,7 @@ what broke was that from **canboatjs 3.19** the address-claim path moves a claim
 into a nested `fields` object first and carries only the unique number across, so
 everything else went on the wire as "not available": manufacturer 2047, device function
 255, device class 127. Product info was unaffected, which is why the device was visible and
-selectable the whole time — but nothing could classify it as an autopilot computer. See the
+selectable the whole time — but not as an autopilot computer. See the
 0.8.5-beta entry in [CHANGELOG.md](CHANGELOG.md) for the full mechanism.
 
 ### Empty name and serial in the device list
