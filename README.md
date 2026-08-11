@@ -2,7 +2,7 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.8.5-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.9.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
@@ -15,18 +15,21 @@
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
-**New in 0.8.5-beta — the emulator finally claims a valid identity. Upgrade if your MFD
-listed the AC but never accepted it as a pilot.** Wherever the plugin resolves canboatjs
-3.19 or newer — which is not necessarily the copy your server bundles, see the
-[changelog](CHANGELOG.md) — the address claim went out with everything except the unique
-number blanked to its "not available" value: manufacturer 2047, device function 255,
-device class 127. Product info was unaffected, so the device appeared in the device list
-and could be selected as a source — and could not be classified as an autopilot computer.
-That accounts for
-`Pilot Present 0.00` on a Triton and "no autopilot computer" on a Vulcan. Diagnosed and
-patched by [@drott](https://github.com/drott). If you are running any earlier release on a
-current SignalK, this is worth the upgrade on its own. See the
-[changelog](CHANGELOG.md) for the mechanism and the wire bytes.
+**New in 0.9.0-beta — the plugin now works on servers that are not configured like the one
+it was written on.** An **SSL-enabled server** was never reached at all, because the
+loopback calls were pinned to plain http on port 3000. A server with **security disabled**
+left the bridge waiting forever for a token that cannot be issued. A **CAN interface that
+never opened** showed a green status frozen on "Starting…" instead of an error. A provider
+**without the `advanceWaypoint` action** failed silently. Also: a boat with only true
+heading now gets heading frames, derived properly rather than mislabelled, and device names
+resolve on servers bundling canboatjs 2.x. The SSL, security-disabled and missing-CAN cases
+were checked against real SignalK 2.30.0 servers, none of which the development boat is
+configured as; no MFD was involved, since a container has no CAN bus. See the
+[changelog](CHANGELOG.md).
+
+**0.8.5-beta before it** fixed the address claim, which on any host resolving canboatjs
+3.19 or newer made an MFD list the emulated AC and never accept it as a pilot. If you are
+coming from anything older, read that entry too.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
@@ -197,7 +200,7 @@ Restart the SignalK server, then enable and configure the plugin under
 | Standard nav PGNs | `false` | duplicates other sources; A/B testing only |
 | **Bridge mode** | **`dry-run`** | `off` / `dry-run` (decode+log) / `live` (steer) |
 | Target autopilot id | `_default` | which `autopilots/<id>` the V2 API drives |
-| SignalK host / port | `127.0.0.1` / `3000` | loopback API target |
+| SignalK host / port | `127.0.0.1` / `3000` | loopback API target — the port and protocol actually used follow the server's own settings, see [below](#signalk-host-and-port) |
 | API token | — | leave empty — auto-requested, you approve it once (see [Access & token](#access--token)) |
 | Commissioning mode | `false` | emulate a control head to open the first-commissioning gate (see below) |
 | Commissioning head address | `44` | address the emulated head claims (commissioning only) |
@@ -213,6 +216,10 @@ Restart the SignalK server, then enable and configure the plugin under
   broadcasting AP state will confuse control heads.
 
 #### Access & token
+
+**If your server has security disabled, there is nothing to do here** — no token exists,
+none is needed, and the bridge steers straight away. The rest of this section applies to a
+server with security enabled, which is what the access-request flow requires.
 
 In `live` mode the bridge has to PUT commands to the Autopilot V2 API, which needs
 a read/write token. You normally **leave the API token field empty** and let the
@@ -233,6 +240,18 @@ automatically submits a fresh request to approve again.
 
 To use a specific token instead, paste it into the **API token** field — it must
 be a valid SignalK JWT; any non-JWT value is ignored and the auto-request is used.
+
+#### SignalK host and port
+
+Leave both alone unless you are pointing the bridge at a **different** SignalK server. The
+loopback calls follow this server's own settings, so an SSL server is reached over `https`
+on its `sslport` without any configuration.
+
+Setting the port to something other than its default overrides the port, and the connection
+is then plain `http` unless the port happens to be this server's own `sslport`. One
+consequence worth knowing: a second SignalK server reachable at `127.0.0.1:3000` can no
+longer be targeted that way, because the bare default is deliberately not treated as an
+override — honouring it would have left every untouched install broken on an SSL host.
 
 ### 3. Enable the autopilot on the MFD
 

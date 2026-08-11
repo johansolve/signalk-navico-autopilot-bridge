@@ -4,6 +4,107 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0-beta] - 2026-08-11
+
+Ways the plugin could fail on a server configured differently from the one it was developed
+on. None is reachable on the reference rig, all were found by review rather than by a user,
+and each presented as something other than its cause. One item does change what goes on the
+bus, and only on a boat that was getting no heading at all — see the heading entry.
+
+Since the development boat is configured in none of these ways, #4, #5 and #6 were checked
+against real SignalK 2.30.0 servers rather than mocks: containers with SSL from
+`settings.json`, with SSL from `SSLPORT` and no settings file at all, with security disabled,
+and — as the control, being the development configuration — with security enabled over plain
+http. In each of them a stub Autopilot V2 provider recorded what actually arrived, and #4 was
+measured with a negative control: the old endpoint takes a 302 where the new one takes a 200
+and the provider receives the command. A fifth, the state a fresh install sits in before any
+user exists, confirmed that the access request survives the admin being created and can then
+be approved. That rig also caught one of these fixes reporting the wrong thing — see the
+canboatjs version note in the CAN entry below.
+
+What it cannot cover is the MFD side: a container has no CAN bus, so nothing in it exercises
+the `130850` decode or anything on the wire, and the heading derivation below has not run
+against a bus at all.
+
+### Fixed
+- **The bridge could not work at all on a server with SSL enabled.** Both loopback clients
+  were pinned to `http://127.0.0.1:3000`. With `ssl` on, the API moves to `sslport` (3443
+  by default) and port 3000 becomes a pure redirect server answering 302 to everything. So
+  the V2 state poll never returned 200 and the firehose degraded to standby; every steer
+  command read as refused and rolled the MFD display back; and the access request never saw
+  a token, retrying every 6 s forever behind a red `NO TOKEN`. Three unrelated-looking
+  faults, one cause. Setting the port field to 3443 did not help either — an `http` request
+  against a TLS listener fails at the socket.
+
+  Protocol and port now come from `app.config.settings`, honouring `PORT` / `SSLPORT`, with
+  the config fields kept as an override for talking to a *different* server. The bare
+  default 3000 is deliberately not treated as an override: it is what the field has always
+  held, so honouring it would have left every untouched install broken. A non-loopback host
+  is taken as given rather than assumed to mirror this server. ([#4](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/4))
+
+- **On a server with security disabled the bridge could never steer.** That server answers
+  **404** to an access request (*"Server security is not enabled"*) and its ACL check
+  permits everything. The plugin retried the request every 6 s indefinitely and refused to
+  send any command without a token, showing `NO TOKEN (approve access under Security →
+  Access Requests)` — a menu that does not exist when security is off. It now detects the
+  case, skips the request and steers. ([#5](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/5))
+
+- **A CAN interface that never opened was invisible.** canboatjs reports that through
+  `setProviderError` on the `app` it is handed; the plugin handed it a bare `EventEmitter`,
+  so the call was a silent no-op and the reason reached the server log and nowhere else.
+  (3.x then retries every 5 s; 2.x does not retry a bus it could not open, so the message
+  no longer promises a retry that will not happen.) `start()` did not throw, the address
+  claim never completed, and because every timer — including the status
+  refresh — is armed only after the claim, the plugin sat on a **green** badge reading
+  *"Starting Simrad AC42 emulator on can0…"* indefinitely. That covers a mistyped interface,
+  one that comes up after SignalK, a missing native module, and permission errors.
+
+  There is now somewhere for canboatjs to report to, and a watchdog: no claim within 45 s
+  is a plugin error naming the interface, saying whether it exists at all and listing the
+  ones that do. 45 rather than 20 because a healthy claim is not instant — canboatjs waits
+  a second, then holds the address for its 5 s detection window, and 2.x's writer branch
+  adds another 5 before the device exists. `stop()` clears both the watchdog and any
+  further reporting, since canboatjs' own retry timer outlives `end()` and would otherwise
+  keep a stopped plugin painting itself red.
+
+  Which major is running is now read through the same resolver that found canboatjs. Read
+  with a plain `require`, it is *unknown* on every stock install — the optional peer
+  dependency is not auto-installed, so canboatjs exists only in the server's tree — and the
+  3.x hosts that do retry were told nothing. Found by running this release in a container
+  rather than by reading it. ([#6](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/6))
+
+- **A provider without `advanceWaypoint` failed silently.** Nav confirm, automatic advance,
+  automatic restart and the authorised-engage completion all go through the V1 action
+  `steering.autopilot.actions.advanceWaypoint`, which `signalk-autopilot` registers and the
+  two other providers named in `signalk.recommends` do not — the server answers 405, visible
+  only in `lastV2Result` if anyone thought to look. A 405 there now sets `NO advanceWaypoint`
+  in the status line and the status page, and clears again if the action later succeeds.
+
+  How reachable this is depends on the rig: those paths are gated on the Raymarine `65379`
+  pilot-mode frame, so on a bus with no Raymarine pilot they are not attempted at all and
+  Nav confirm falls through to a plain V2 state change. The narrow case is a Raymarine pilot
+  on the bus driven through some other V2 provider. ([#9](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/9))
+
+- **A boat with no magnetic heading got no heading frames at all.** `headingRad()` read
+  `navigation.headingMagnetic` only, so a GPS compass publishing `headingTrue` alone left
+  `127237`, `127250` and the `65341` heading empty and the MFD showing "- - -". It is now
+  derived as `headingTrue - navigation.magneticVariation`.
+
+  Not simply substituted: every frame here declares its heading **magnetic** — `127237`
+  carries reference `0x44` and `127250` the magnetic reference bits — so putting a true
+  heading in them would publish a wrong reference on a navigation bus. Worse, with
+  `enableStdPgns` on, the server reads our own `127250` back as `navigation.headingMagnetic`
+  and `headingRad()` would then prefer it. Without a variation to convert with, nothing is
+  sent and the reason is logged once. This is the one change in the release that alters the
+  bus, and only where there was nothing to alter.
+
+- **Device names were blank on servers bundling canboatjs 2.x.** The source registry holds
+  raw canboat fields, so their spelling follows the server's canboatjs — camelCase on 3.x,
+  Title Case on 2.x — and only camelCase was read. Cosmetic. Note that this turns on the
+  version the SERVER bundles, not the one the plugin resolves, which is the distinction the
+  0.8.5-beta entry rests on: the reference rig is 3.20.0 for the first and 2.10.0 for the
+  second, and escaped both.
+
 ## [0.8.5-beta] - 2026-08-11
 
 ### Fixed

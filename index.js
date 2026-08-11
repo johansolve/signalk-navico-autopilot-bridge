@@ -5,6 +5,7 @@ const path = require('path')
 const ACEmulator = require('./lib/ac-emulator')
 const ControlHead = require('./lib/control-head')
 const AccessRequest = require('./lib/access-request')
+const { isOpenServer } = require('./lib/sk-endpoint')
 
 module.exports = function (app) {
   let emulator = null
@@ -128,7 +129,10 @@ module.exports = function (app) {
           skPort: {
             type: 'number',
             title: 'SignalK port',
-            description: 'Port for the loopback V2 API calls.',
+            description: 'Port for the loopback V2 API calls. Leave at 3000 unless you are ' +
+              'pointing the bridge at a DIFFERENT SignalK server: the port and the protocol ' +
+              'are otherwise taken from this server\u2019s own settings, so an SSL server is ' +
+              'reached over https on its sslport automatically.',
             default: 3000
           },
           token: {
@@ -348,15 +352,24 @@ module.exports = function (app) {
         if (validJwt(o.token)) { configToken = o.token } else { app.error('Configured token is not a JWT — ignoring it (using the granted device token if present)') }
       }
       const token = configToken || saved.token || null
-      emulator = new ACEmulator(app, Object.assign({}, o, { token }))
+      // With security disabled the server has no tokens to issue, so the bridge must steer
+      // without one rather than wait forever for an approval nobody can grant (issue #5).
+      const openServer = isOpenServer(app)
+      emulator = new ACEmulator(app, Object.assign({}, o, { token, openServer }))
       emulator.start()
 
       // No token and we intend to steer -> request device access; an admin
       // approves it under Security -> Access Requests, then we store + use it.
-      if (!token && o.bridge === 'live') {
+      // Skipped when the server has no security: there is nobody to approve it and the
+      // endpoint 404s, so the request would just retry every 6 s forever.
+      if (openServer && o.bridge === 'live') {
+        app.debug('server security is disabled -- steering without a token, no access request')
+      }
+      if (!token && !openServer && o.bridge === 'live') {
         accessReq = new AccessRequest({
-          host: o.skHost || '127.0.0.1',
-          port: o.skPort || 3000,
+          app,
+          host: o.skHost,
+          port: o.skPort,
           description: 'Navico autopilot bridge (needs readwrite to steer)',
           clientId: saved.clientId,
           debug: app.debug
@@ -380,9 +393,14 @@ module.exports = function (app) {
         head.start()
         emulator.setCommissioningHead(head)
       }
-      app.setPluginStatus('Starting Simrad ' + (o.acModel || 'AC42') +
-        ' emulator on ' + (o.canInterface || 'can0') +
-        (o.enableCommissioningHead ? ' + commissioning head' : '') + '…')
+      // `new Canbus()` connects synchronously, so a bus that cannot be opened has already
+      // reported through setPluginError by now. Overwriting that with a green "Starting…"
+      // is how the failure stayed invisible in the first place -- leave it standing.
+      if (!(emulator && emulator.state && emulator.state.canbusError)) {
+        app.setPluginStatus('Starting Simrad ' + (o.acModel || 'AC42') +
+          ' emulator on ' + (o.canInterface || 'can0') +
+          (o.enableCommissioningHead ? ' + commissioning head' : '') + '…')
+      }
     } catch (e) {
       app.setPluginError('Failed to start: ' + (e && e.message))
       app.error(e)
