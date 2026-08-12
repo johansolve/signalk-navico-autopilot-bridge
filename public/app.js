@@ -124,7 +124,10 @@ function render (d) {
   cls($('n-bridge'), 'node primary', bcls)
   $('b-bridge').textContent = 'bridge: ' + d.bridge
   $('b-bridge').style.color = tone(d.bridge === 'live' ? 'ok' : d.bridge === 'dry-run' ? 'warn' : 'mut')
-  $('bridge-sub').textContent = 'Emulated ' + (d.acModel || 'AC') + ' — decodes 130850, firehoses state.'
+  // The boat type rides along here because it is the one commissioning value the MFD
+  // renders (turn patterns versus the Tack control) and the plotter can change it itself.
+  $('bridge-sub').textContent = 'Emulated ' + (d.acModel || 'AC') +
+    (d.boatType ? ' · ' + d.boatType : '') + ' — decodes 130850, firehoses state.'
 
   // provider node
   cls($('n-prov'), 'node', d.noProvider ? 'dim' : '')
