@@ -19,6 +19,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mean the `kind` asked for — read blind, a wind angle would reach the MFD as a heading.
   V1 stays the fallback, so a V1-only pilot is unchanged.
 
+- **A spec-conforming V2 provider in wind mode had its wind angle sent as a course to steer.**
+  The read above decided what `steering.autopilot.target` meant from the pilot's V2 *state*,
+  but the spec separates `state` (standby/auto) from `mode` (`compass`/`gps`/`wind`). A provider
+  holding a wind angle reports state `auto` and mode `wind`, which the state test read as "a
+  heading" — so the wind angle went into `127237`'s Heading-To-Steer and onto the MFD as a
+  course, for as long as the pilot stayed in wind. It worked against `signalk-autopilot` only
+  because that plugin declares `modes: []` and puts wind among its states instead; the V2-only
+  providers this whole path exists for are free not to. `getState()` now returns the mode
+  alongside the state, and where a provider declares one the mode decides.
+
 ### Known limitations
 - **The V2 target is assumed to be a magnetic heading, because nothing says which it is.**
   A pilot publishing a true heading shows a set heading off by the magnetic variation.

@@ -169,3 +169,71 @@ test('the nav-pending 65341 carries the V2 target', () => {
   assert.equal(sent.length, 1)
   assert.equal(sent[0].bytes, '41,9f,ff,ff,0d,ff,d0,51')
 })
+
+// --- V2 mode versus V2 state -------------------------------------------------------------
+// The gate above reads the pilot's STATE, which works against signalk-autopilot only because
+// that plugin declares `modes: []` and puts wind among its states. The V2 spec separates the
+// two (@signalk/server-api autopilotapi.ts: states standby/auto, `modes: ['compass','gps',
+// 'wind']`), so a spec-conforming provider holding a wind angle reports state 'auto' with mode
+// 'wind'. Read by state alone that is "a heading", and the wind angle goes into 127237's
+// Heading-To-Steer and onto the MFD as a course to steer -- not for the 2 s of a stale poll,
+// but for as long as the pilot stays in wind. Precisely the V2-only providers of issue #10.
+
+function inModeAndMode (ac, state, mode) {
+  ac.state.skApState = state
+  ac.state.skApMode = mode
+  ac.state.lastSkStateMs = Date.now()
+}
+
+test('a declared wind mode beats a state that says auto', () => {
+  const ac = emulator()
+  inModeAndMode(ac, 'auto', 'wind')          // spec-conforming: state auto, mode wind
+  model(ac, { 'steering.autopilot.target.value': -0.7854 })
+  assert.equal(ac.apTargetRad('heading'), null, 'wind angle must not be served as a heading')
+  assert.equal(ac.apTargetRad('wind'), -0.7854, 'and must still be served as a wind angle')
+})
+
+test('a declared compass mode is read as a heading whatever the state is called', () => {
+  const ac = emulator()
+  inModeAndMode(ac, 'auto', 'compass')
+  model(ac, V2_ONLY)
+  assert.equal(ac.apTargetRad('heading'), 2.0944)
+  assert.equal(ac.apTargetRad('wind'), null)
+})
+
+test('a declared gps/route mode is a heading too', () => {
+  const ac = emulator()
+  inModeAndMode(ac, 'auto', 'gps')
+  model(ac, V2_ONLY)
+  assert.equal(ac.apTargetRad('heading'), 2.0944)
+})
+
+// signalk-autopilot declares no modes at all, so the state test must still be what decides.
+test('no declared mode falls back to the state', () => {
+  const ac = emulator()
+  inModeAndMode(ac, 'wind', null)
+  model(ac, { 'steering.autopilot.target.value': -0.7854 })
+  assert.equal(ac.apTargetRad('wind'), -0.7854)
+  assert.equal(ac.apTargetRad('heading'), null)
+})
+
+// Standby stays excluded on the state alone: a provider may well leave a mode declared while
+// nothing is engaged, and the callers' live fallbacks beat a parked target. See above.
+test('a declared mode does not resurrect the target in standby', () => {
+  const ac = emulator()
+  inModeAndMode(ac, 'standby', 'compass')
+  model(ac, { 'steering.autopilot.target.value': 0 })
+  assert.equal(ac.apTargetRad('heading'), null)
+})
+
+// End to end at the symptom, mirroring the 127237 test above: the wind angle must not reach
+// the Heading-To-Steer field.
+test('127237 carries no set heading for a spec-conforming pilot in wind', () => {
+  const ac = emulator()
+  inModeAndMode(ac, 'auto', 'wind')
+  model(ac, { 'steering.autopilot.target.value': -0.7854 })
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.send127237()
+  assert.equal(sent.length, 0, 'no heading available -> nothing sent, rather than a wind angle')
+})
