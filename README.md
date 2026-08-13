@@ -421,10 +421,14 @@ re-broadcasts this; without it the MFD shows "- - -". It is sent at **5 Hz**
 because the boat's other devices broadcast `127237` with an *empty*
 Heading-To-Steer at 10–20 Hz, which otherwise blanks the value and makes the
 display flicker. The value is the pilot's own setpoint, read from whichever shape
-its provider publishes: the Autopilot V2 `steering.autopilot.target` while the
-engaged mode makes that a heading (auto or route), else the V1
-`steering.autopilot.target.headingMagnetic`, falling back to
-`navigation.headingMagnetic`. Reading only the V1 sub-path is what left a
+its provider publishes: the Autopilot V2 `steering.autopilot.target` while that
+target means a heading, else the V1 `steering.autopilot.target.headingMagnetic`,
+falling back to `navigation.headingMagnetic`. What the single V2 target means is
+taken from the pilot's V2 *mode* (`compass`/`gps`/`wind`) where the provider
+declares one, since that is the field that says so; where it declares none — as
+`signalk-autopilot` does, keeping wind among its *states* instead — the state is
+all there is, and `auto` or `route` is read as a heading. Standby is excluded
+either way. Reading only the V1 sub-path is what left a
 V2-only provider showing "- - -" on the MFD
 ([#10](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/10)).
 It is sent as
