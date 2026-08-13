@@ -432,6 +432,21 @@ Magnetic; the MFD converts to its configured heading reference (e.g. True) using
 the bus magnetic variation, so set the MFD's heading units to match the rest of
 the boat.
 
+**The V2 target carries no heading reference, and is assumed to be magnetic.** V1
+put the reference in the path name, and the bridge read only the magnetic one, so
+there was nothing to assume. The single V2 `steering.autopilot.target` is just a
+number: `signalk-autopilot` copies whichever of `target.headingTrue` and
+`target.headingMagnetic` its pilot publishes into the same field, and the bridge
+cannot tell them apart — least of all in the V2-only case this path exists for,
+where no V1 sub-path is published to compare against. On a pilot publishing
+`headingTrue`, the set heading shown on the MFD is therefore off by the magnetic
+variation: a few degrees in most of Europe, more elsewhere. Nothing steers off
+this field (it is display only, and course commands go out over the V2 API), but
+the number beside the mode is wrong by that much. There is no configuration that
+avoids it: source priorities decide which *source* wins for a path, not which
+path is read, and the V2 target is read first regardless. Please report it if you
+see it — a boat that hits this is the evidence needed to fix it properly.
+
 ## Verified behaviour (on the tested rig)
 
 - MFD binds to the emulator and raises a *lost-autopilot* alarm the instant the

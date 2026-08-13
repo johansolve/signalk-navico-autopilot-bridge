@@ -19,6 +19,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mean the `kind` asked for — read blind, a wind angle would reach the MFD as a heading.
   V1 stays the fallback, so a V1-only pilot is unchanged.
 
+### Known limitations
+- **The V2 target is assumed to be a magnetic heading, because nothing says which it is.**
+  A pilot publishing a true heading shows a set heading off by the magnetic variation.
+  Display only, and not fixable from config. [README §Set heading
+  (127237)](README.md#set-heading-127237) has the reasoning.
+
 ## [0.9.0-beta] - 2026-08-11
 
 Ways the plugin could fail on a server configured differently from the one it was developed
