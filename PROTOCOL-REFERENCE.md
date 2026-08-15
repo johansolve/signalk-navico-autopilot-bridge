@@ -20,6 +20,7 @@ reverse-engineered from bus captures. Autopilot control is **Simnet**, not Navio
 | `merrimac` | Kees' `candump/AUTOPILOT_CONTROL.md` (merrimac-rs, a *different* MFD dialect) |
 | `htool-guess` | inherited from htool/RaymarineAPtoFakeNavicoAutoPilot, unverified |
 | `code` | read out of canboatjs / this plugin's own source, not off a bus |
+| `vulcan9-set` | Vulcan 9 `Settings → Autopilot` writes, captured against this emulator and cross-checked against the AC's readback |
 | `issue-1` | reported by a user on issue #1 (a Vulcan 9 and a Triton²) |
 
 > **Kees' raw candumps are unfiltered — never commit `nac3_wind.raw`,
@@ -509,7 +510,65 @@ control set the MFD's autopilot sidebar offers.
   whatever the user selects, leaving the turn patterns unreachable; a fixed powerboat
   value removes the Tack button.
 
-### 7.5 Requirements for a write path
+### 7.5 Autopilot tuning keys
+
+The plotter writes the pilot's steering parameters over the same store, from
+`Settings → Autopilot → Automatic steering…`. The keys below were pinned by setting
+each parameter on a Vulcan 9 and reading the write off the bus, then cross-checking it
+against the value reported for what the screen had shown beforehand. `vulcan9-set`
+
+**The key splits into two bytes: b6 is the group, b7 the parameter within it.** Both
+hold across the set — `0x0D19` and `0x0D1A` are one parameter in two bands, and boat
+type `0x0A18` is parameter `0x0A` of the common group.
+
+| group (b6) | section |
+|---|---|
+| `0x18` | common to both bands |
+| `0x19` | Low — high speed, or beating and reaching |
+| `0x1A` | High — low speed, or running |
+| `0x1C` | sailing |
+
+| parameter | key | group·param | width | wire encoding | set → sent | shown → reported |
+|---|---|---|---|---|---|---|
+| Transition speed | `0x0C18` | 18·0C | u16 | 0.01 m/s | 0 kn → 0 | 6 kn → 308 |
+| Rudder gain, Low | `0x0D19` | 19·0D | u16 | value × 100 | 4.00 → 400 | 0.62 → 62 |
+| Rudder gain, High | `0x0D1A` | 1A·0D | u16 | value × 100 | 4.00 → 400 | 0.55 → 55 |
+| Auto trim, High | `0x0E1A` | 1A·0E | u16 | seconds × 10 | 4 s → 40 | 40 s → 400 |
+| Counter rudder, High | `0x0F1A` | 1A·0F | u16 | seconds × 100 | 8.0 → 800 | 0.50 → 50 |
+| Rate limit, High | `0x101A` | 1A·10 | u32 | 3.125e-8 rad/s | 15.0 °/s → 8377581 | 7.0 °/s → 3908552 |
+
+- **The scales are not uniform, and nothing on the wire declares which applies.**
+  Dimensionless values and short times are decimal shifts (rudder gain and counter
+  rudder × 100, auto trim × 10). Speed is SI rather than the displayed unit: 6 kn =
+  3.0867 m/s → 308. Rate limit is an NMEA 2000 rate field at the 3.125e-8 rad/s
+  resolution 127251 uses — 8377581 × 3.125e-8 = 0.2617994 rad/s = 15.00000 °/s against
+  15.0 typed, and the AC's 3908552 = 6.99823 °/s against 7.0 displayed.
+- **Width is a property of the parameter.** Five of the six are 16-bit, rate limit is
+  32-bit. A fixed-width reader gets rate limit wrong by orders of magnitude.
+- **The Low band repeats the High band with b6 changed.** Only rudder gain was set in
+  both. The captured AC42's rows for the other Low keys decode consistently under the
+  High scales — `0x0E19` = 400 (40 s), `0x0F19` = 50 (0.50), `0x1019` = 3349163
+  (≈ 6.0 °/s) — but were not written and read back. `ac42-comm`
+- **The sailing group is unresolved.** Saving `Sailing…` sent `0x081C` = 120, `0x0B18`
+  = 18205 and `0x091C` = 4 together, ~100 ms apart and all at their existing values, so
+  nothing distinguished tack time, tack angle and wind function. `0x0B18` at 1e-4 rad
+  is 104.3° against 100° on screen. Both open. `vulcan9-set`
+
+When the plotter writes: `vulcan9-set`
+
+- **One key per keypad, on OK**, 1–2 ms after the tap. Each parameter on
+  `Automatic steering…` has its own keypad.
+- **A whole dialog, on Save.** `Sailing…` carries several fields and sends them
+  together.
+- **Settings pages read nothing.** Opening `Automatic steering…` or `Sailing…` produced
+  no 130845 at all — the plotter displays values it already holds. The op-00 read
+  belongs to the commissioning wizard (§7.2), not to the settings pages.
+- **The value report is what the page then shows.** On this rig the reply came from the
+  emulator's canned table, so it reported the old value and the plotter reverted the
+  field just written. That is the failure rule 5 of §7.6 exists to prevent — and it is
+  also how the "shown → reported" column above was read.
+
+### 7.6 Requirements for a write path
 
 Derived from §7.1–7.2. An implementation that accepts 130845 writes:
 
