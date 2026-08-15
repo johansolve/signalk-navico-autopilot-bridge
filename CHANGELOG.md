@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Fixed
+- **Every button failed with HTTP 500 `Invalid state supplied!` against a pypilot pilot.**
+  The bridge PUT `standby|auto|wind|route` as V2 **states** — `@signalk/signalk-autopilot`'s
+  vocabulary and nobody else's. The spec fixes no state names: a provider declares its own,
+  and puts the steering reference in `options.modes`. A mode key is now a (state, mode)
+  **pair**, translated both ways by [`lib/ap-mode-translate.js`](lib/ap-mode-translate.js).
+  Also fixes the status page, which painted a disabled pypilot pilot green.
+
 - **A V2-only pilot showed "Set Heading - - -" on the plotter despite being engaged.**
   V1 splits the setpoint by kind — `target.headingMagnetic` / `target.windAngleApparent` —
   and those were the only paths the bridge read. V2 instead has one
