@@ -513,9 +513,11 @@ control set the MFD's autopilot sidebar offers.
 ### 7.5 Autopilot tuning keys
 
 The plotter writes the pilot's steering parameters over the same store, from
-`Settings → Autopilot → Automatic steering…`. The keys below were pinned by setting
-each parameter on a Vulcan 9 and reading the write off the bus, then cross-checking it
-against the value reported for what the screen had shown beforehand. `vulcan9-set`
+`Settings → Autopilot → Automatic steering…` and `Settings → Autopilot → Sailing…`.
+The keys below were pinned by setting parameters on a Vulcan 9 and reading the write
+off the bus, then cross-checking against the value reported for what the screen had
+shown beforehand. Rows with no `set → sent` entry are the ones the rig could only
+read back. `vulcan9-set`
 
 **The key splits into two bytes: b6 is the group, b7 the parameter within it.** Both
 hold across the set — `0x0D19` and `0x0D1A` are one parameter in two bands, and boat
@@ -524,35 +526,73 @@ type `0x0A18` is parameter `0x0A` of the common group.
 | group (b6) | section |
 |---|---|
 | `0x18` | common to both bands |
-| `0x19` | Low — high speed, or beating and reaching |
-| `0x1A` | High — low speed, or running |
+| `0x19` | Low |
+| `0x1A` | High |
 | `0x1C` | sailing |
+
+**High and Low name the gain set, not the boat speed.** `Automatic steering…`
+describes High as *"For low speed and when running with a sailboat"* and Low as
+*"For high speed and when beating or reaching with a sailboat"*. Transition speed
+(`0x0C18`) is the crossover point.
+
+Every band value in the AC42 capture matches the Vulcan 9 display before any edit:
+
+| | rudder | counter rudder | auto trim | rate limit |
+|---|---|---|---|---|
+| **High** — screen | 0.55 | 0.50 | 40 | 7.0 |
+| `0x1A` — capture | 55 | 50 | 400 | 3908552 |
+| **Low** — screen | 0.62 | 0.50 | 40 | 6.0 |
+| `0x19` — capture | 62 | 50 | 400 | 3350187 |
+
+The High set applies at low speed, so its 7.0 °/s rate limit against Low's 6.0 °/s
+is consistent with the assignment. `ac42-comm` `vulcan9-set`
 
 | parameter | key | group·param | width | wire encoding | set → sent | shown → reported |
 |---|---|---|---|---|---|---|
 | Transition speed | `0x0C18` | 18·0C | u16 | 0.01 m/s | 0 kn → 0 | 6 kn → 308 |
-| Rudder gain, Low | `0x0D19` | 19·0D | u16 | value × 100 | 4.00 → 400 | 0.62 → 62 |
 | Rudder gain, High | `0x0D1A` | 1A·0D | u16 | value × 100 | 4.00 → 400 | 0.55 → 55 |
 | Auto trim, High | `0x0E1A` | 1A·0E | u16 | seconds × 10 | 4 s → 40 | 40 s → 400 |
 | Counter rudder, High | `0x0F1A` | 1A·0F | u16 | seconds × 100 | 8.0 → 800 | 0.50 → 50 |
 | Rate limit, High | `0x101A` | 1A·10 | u32 | 3.125e-8 rad/s | 15.0 °/s → 8377581 | 7.0 °/s → 3908552 |
+| Rudder gain, Low | `0x0D19` | 19·0D | u16 | value × 100 | 4.00 → 400 | 0.62 → 62 |
+| Auto trim, Low | `0x0E19` | 19·0E | u16 | seconds × 10 | — | 40 s → 400 |
+| Counter rudder, Low | `0x0F19` | 19·0F | u16 | seconds × 100 | — | 0.50 → 50 |
+| Rate limit, Low | `0x1019` | 19·10 | u32 | 3.125e-8 rad/s | 12.0 °/s → 6702065 | 6.0 °/s → 3350187 |
+| Tack time | `0x081C` | 1C·08 | u16 | seconds × 10 | — | 12 s → 120 |
+| Tack angle | `0x0B18` | 18·0B | u16 | 65536 = 360° | 60° → 10923, 150° → 27307 | 100° → 18205 |
+| Wind function | `0x091C` | 1C·09 | u16 | enum | Apparent → 1, True → 2 | Auto → 4 |
 
 - **The scales are not uniform, and nothing on the wire declares which applies.**
   Dimensionless values and short times are decimal shifts (rudder gain and counter
-  rudder × 100, auto trim × 10). Speed is SI rather than the displayed unit: 6 kn =
-  3.0867 m/s → 308. Rate limit is an NMEA 2000 rate field at the 3.125e-8 rad/s
-  resolution 127251 uses — 8377581 × 3.125e-8 = 0.2617994 rad/s = 15.00000 °/s against
-  15.0 typed, and the AC's 3908552 = 6.99823 °/s against 7.0 displayed.
-- **Width is a property of the parameter.** Five of the six are 16-bit, rate limit is
-  32-bit. A fixed-width reader gets rate limit wrong by orders of magnitude.
-- **The Low band repeats the High band with b6 changed.** Only rudder gain was set in
-  both. The captured AC42's rows for the other Low keys decode consistently under the
-  High scales — `0x0E19` = 400 (40 s), `0x0F19` = 50 (0.50), `0x1019` = 3349163
-  (≈ 6.0 °/s) — but were not written and read back. `ac42-comm`
-- **The sailing group is unresolved.** Saving `Sailing…` sent `0x081C` = 120, `0x0B18`
-  = 18205 and `0x091C` = 4 together, ~100 ms apart and all at their existing values, so
-  nothing distinguished tack time, tack angle and wind function. `0x0B18` at 1e-4 rad
-  is 104.3° against 100° on screen. Both open. `vulcan9-set`
+  rudder × 100, auto trim and tack time × 10). Speed is SI rather than the displayed
+  unit: 6 kn = 3.0867 m/s → 308. Rate limit is an NMEA 2000 rate field at the
+  3.125e-8 rad/s resolution 127251 uses — 8377581 × 3.125e-8 = 0.2617994 rad/s =
+  15.00000 °/s against 15.0 typed, and the AC's 3908552 = 6.99823 °/s against 7.0
+  displayed.
+- **Angles are a 16-bit binary angle**, `65536 = 360°`, not 1e-4 rad. Tack angle set
+  to 60° sent 10923 and set to 150° sent 27307; a binary angle gives 10922.67 and
+  27306.67, 1e-4 rad gives 10472 and 26180. The AC42's stored 18205 is 100.003° as a
+  binary angle and 104.3° at 1e-4 rad, against 100° displayed. `vulcan9-set`
+- **Width is a property of the parameter.** Rate limit is 32-bit, everything else here
+  16-bit. A fixed-width reader gets rate limit wrong by orders of magnitude.
+- **Both bands are written, not inferred.** Rudder gain in each, rate limit in Low
+  (12.0 °/s → 6702065) as well as High. The remaining Low keys are pinned by readback
+  against the display. `vulcan9-set`
+- **The sailing dialog spans two groups.** Tack time and wind function are `0x1C`;
+  tack angle is `0x0B18`, parameter `0x0B` of the common group, beside boat type.
+  Keys were attributed by single-field edits: tack angle 100 → 150 → 60 moved
+  `0x0B18` only, wind function Auto → Apparent → True moved `0x091C` only, 4 → 1 → 2.
+  Tack time is the remaining key, and its 120 against 12 sec displayed is the same
+  seconds × 10 as auto trim; its field is a spinner this rig could not drive, so that
+  row is by elimination. `vulcan9-set`
+- **Rate limit is converted in 32-bit float — expect ±1 count.** 15.0, 12.0 and
+  6.0 °/s sent 8377581, 6702065 and 3351032; exact arithmetic at 3.125e-8 rad/s gives
+  8377580.4, 6702064.3 and 3351032.2, so the wire value is neither a round nor a ceil
+  of it. All three match `round(float32(deg × π/180) / 3.125e-8)`.
+- **A displayed value does not identify a stored one.** 6.0 °/s written is 3351032;
+  the AC42 stored 3350187 = 5.99849 °/s. Both display as 6.0. Compare rate limits
+  with a tolerance, and do not expect a value read back and rewritten to be
+  byte-identical. `vulcan9-set`
 
 When the plotter writes: `vulcan9-set`
 
@@ -563,10 +603,11 @@ When the plotter writes: `vulcan9-set`
 - **Settings pages read nothing.** Opening `Automatic steering…` or `Sailing…` produced
   no 130845 at all — the plotter displays values it already holds. The op-00 read
   belongs to the commissioning wizard (§7.2), not to the settings pages.
-- **The value report is what the page then shows.** On this rig the reply came from the
-  emulator's canned table, so it reported the old value and the plotter reverted the
-  field just written. That is the failure rule 5 of §7.6 exists to prevent — and it is
-  also how the "shown → reported" column above was read.
+- **The value report is what the page then shows**, measured both ways on this rig.
+  Against the canned table the reply carries the old value and the plotter reverts the
+  field just written — which is how the "shown → reported" column above was read, every
+  row taken before any edit. Against an emulator that applies op-01 before answering,
+  the same edits persist across reopening the dialog. §7.6 rule 5.
 
 ### 7.6 Requirements for a write path
 

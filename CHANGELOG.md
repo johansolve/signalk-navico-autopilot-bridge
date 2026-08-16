@@ -29,6 +29,28 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   providers this whole path exists for are free not to. `getState()` now returns the mode
   alongside the state, and where a provider declares one the mode decides.
 
+### Documentation
+- **`PROTOCOL-REFERENCE.md` §7 — the 130845 commissioning key/value store.** Frame layout,
+  with the target device in payload byte 2 and every frame, replies included, broadcast at
+  the N2K level; ops `00` read, `01` write, `02` value report; an unanswered read as a
+  defined state; and the key taken off the wire rather than from the canboat field name,
+  which varies by version (`DYNAMIC_FIELD_KEY`). Sources: Kees' `ac42-commissioning.raw`
+  (478 × 130845, five displays, AC42 at `0x0d`, SCX-20 at `0x34`) and a Vulcan 9 bench rig.
+  `ac42-comm` `vulcan9-set`
+- **§7.4 — boat type `0x0A18`**, which selects Tack and the wind modes, or the turn patterns,
+  in the MFD sidebar.
+- **§7.5 — the autopilot tuning keys** written from `Automatic steering…` and `Sailing…`:
+  group/parameter split of the key, and width and scale per parameter. The scales are not
+  uniform — rudder gain and counter rudder × 100, auto trim and tack time × 10, transition
+  speed 0.01 m/s rather than the displayed knots, rate limit u32 at the 3.125e-8 rad/s
+  resolution 127251 uses, tack angle u16 binary angle at `65536 = 360°`. Both gain bands and
+  all three sailing keys pinned by single-field writes. `vulcan9-set`
+- **§7.6 — conformance rules for a device that accepts 130845 writes.** Six requirements
+  derived from §7.1–7.2: address filtering, operation handling, rejection of value-less
+  writes, frame length, the value report that acknowledges a write, and persistence.
+- Refs [#12](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/12) and
+  [#13](https://github.com/johansolve/signalk-navico-autopilot-bridge/pull/13).
+
 ### Known limitations
 - **The V2 target is assumed to be a magnetic heading, because nothing says which it is.**
   A pilot publishing a true heading shows a set heading off by the magnetic variation.
