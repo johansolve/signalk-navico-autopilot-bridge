@@ -224,3 +224,22 @@ test('a mode the provider cannot do rolls the display back instead of steering',
   assert.strictEqual(refused, 'no wind mode')
   assert.match(ac.state.lastV2Result, /NOT SENT/)
 })
+
+test('garmin: a wind hold reported as state auto reads as wind through the emulator too', () => {
+  // acModeOf got this right all along; normalizeMode used to short-circuit on the AC name
+  // `auto` before ever consulting the mode, so keyMode() said auto forever, un-inverting
+  // wind-mode nudges and gating Tack off on a pilot that was in wind.
+  const ac = emulator(null)
+  poll(ac, 'auto', 'wind', GARMIN)
+  assert.strictEqual(ac.normalizeMode(ac.state.skApState), 'wind')
+  assert.strictEqual(ac.keyMode(), 'wind')
+  assert.ok(ac.engaged())
+})
+
+test('a declared state without an engaged flag falls back to the name heuristic', () => {
+  // `{name: 'auto'}` with the flag omitted must not read as standby forever; the bare-string
+  // form of the same declaration never did.
+  const flagless = { states: [{ name: 'auto' }, { name: 'standby' }], modes: [] }
+  assert.strictEqual(translate.acModeOf('auto', null, flagless), 'auto')
+  assert.strictEqual(translate.acModeOf('standby', null, flagless), 'standby')
+})
