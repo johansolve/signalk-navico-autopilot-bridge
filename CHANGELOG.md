@@ -30,6 +30,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   alongside the state, and where a provider declares one the mode decides.
 
 ### Documentation
+- **§2.2 — why No Drift maps to auto.** The EV-200 has no COG-referenced hold:
+  `SeatalkPilotMode16` carries four modes on distinct high bits, and the `0x0181`
+  `signalk-autopilot` sends as its waypoint advance is `Track | 1`, the Track-engaged
+  sub-mode §5 already records. Whether the plotter can show a No Drift label of its own is
+  untested, since the dockside note was taken with the bridge reporting `auto`.
+  ([#17](https://github.com/johansolve/signalk-navico-autopilot-bridge/issues/17))
 - **`PROTOCOL-REFERENCE.md` §7 — the 130845 commissioning key/value store.** Frame layout,
   with the target device in payload byte 2 and every frame, replies included, broadcast at
   the N2K level; ops `00` read, `01` write, `02` value report; an unanswered read as a

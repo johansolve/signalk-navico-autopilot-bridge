@@ -114,14 +114,15 @@ Notes:
 - `0x0c` was long carried as a guess (logged, never fired). Confirmed 2026-07-22 from
   the bridge's own diagnostic log: the Vulcan sent it with the same `0x1c` envelope and
   the same frame layout as Auto and Wind, in a sequence with both. It maps to plain
-  **auto**, not to a No Drift mode of its own: Raymarine's No Drift is a COG-referenced
-  heading hold, but `SeatalkPilotMode16` `0x0181` ("No Drift, COG referenced") is
-  decoded to `route` by `@signalk/n2k-signalk`, and `signalk-autopilot` already uses
-  that same `0x0181` as its `advanceWaypoint` — so firing No Drift would mean sending
-  track-engage. Auto is the honest approximation: the pilot holds a heading, it just
-  does not compensate for drift. Confirmed dockside the same day: pressing No Drift
-  engages the pilot, and **both** the MFD and the p70s report Auto — the plotter does
-  not latch a No Drift label of its own, so button and display stay consistent.
+  **auto**, because the EV-200 has no COG-referenced hold to ask for: `SeatalkPilotMode16`
+  carries four modes on distinct high bits, and `0x0181` is `Track | 1`, the Track-engaged
+  sub-mode (§5) that `signalk-autopilot` sends as its `advanceWaypoint`. Auto is the
+  honest approximation: the pilot holds a heading, it just does not compensate for drift.
+  Confirmed dockside the same day: pressing No Drift engages the pilot, and **both** the
+  MFD and the p70s report Auto. Whether the plotter can latch a No Drift label of its own
+  is untested — the bridge was reporting `auto` at the time, so it was never given
+  anything else to show. A provider that *does* offer a COG hold is not asked for it
+  either: the key maps to `auto` before any provider vocabulary is involved (#17).
 - `0x10` was first seen as a single undecodable sample from a second head. It is the
   **MFD's nav-confirm Yes**, proven dockside 2026-07-14: one press takes the pilot from
   Track-pending (`0x0180`) to Track-engaged (`0x0181`). It only fires while nav-pending.
