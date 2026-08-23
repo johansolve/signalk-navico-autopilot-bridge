@@ -20,6 +20,7 @@ reverse-engineered from bus captures. Autopilot control is **Simnet**, not Navio
 | `merrimac` | Kees' `candump/AUTOPILOT_CONTROL.md` (merrimac-rs, a *different* MFD dialect) |
 | `htool-guess` | inherited from htool/RaymarineAPtoFakeNavicoAutoPilot, unverified |
 | `code` | read out of canboatjs / this plugin's own source, not off a bus |
+| `vulcan9-set` | Vulcan 9 `Settings → Autopilot` writes, captured against this emulator and cross-checked against the AC's readback |
 | `issue-1` | reported by a user on issue #1 (a Vulcan 9 and a Triton²) |
 
 > **Kees' raw candumps are unfiltered — never commit `nac3_wind.raw`,
@@ -380,7 +381,260 @@ supports `state` and the V1 `advanceWaypoint` action works.
 
 ---
 
-## 7. Cross-references
+## 7. Commissioning — 130845 key/value store
+
+130845 carries a key/value parameter store: a 16-bit key, a value, and an operation
+byte selecting read, write or value report. The MFD's dockside-config and
+commissioning wizard reads and writes every pilot parameter it shows over this PGN.
+The AC is not the only server on the bus — in `ac42-comm` the same wizard also reads
+an SCX-20 satellite compass.
+
+Figures below are counted from `ac42-comm` (478 × 130845 between five displays, the
+AC42 at `0x0d` and the SCX-20 at `0x34`) unless another tag says otherwise.
+
+### 7.1 Frame layout
+
+Fast-packet, 14 bytes. Requests and replies share one layout.
+
+```
+b0  41    Mfr+Industry low  (1857 / ind 4)
+b1  9F    Mfr+Industry high
+b2  <ac>  scope: device address (0x0d captured AC42, 0x23 bridge); FF = bus-wide
+b3  FF
+b4  FF    FF while b2 addresses one device; 01 on the broadcast form
+b5  FF
+b6  <klo> key, LE16 low
+b7  <khi> key, LE16 high
+b8  00    spare (00 in all 478 frames)
+b9  <op>  00 read · 01 write · 02 value report
+b10..b13  value, LSB first, unused bytes FF
+```
+
+- **The target is byte 2; the PGN destination is always 255.** All 478 frames,
+  replies included, are broadcast at the N2K level. A device serves the frames whose
+  byte 2 holds its own address. In a request byte 2 names the device asked; in a value
+  report it names the device the value belongs to, which is the sender (§7.2).
+- **Value width is a property of the key**, `ff`-padded to the frame: 1 byte
+  (`0x0A18` = `00,ff,ff,ff`), 2 (`0x0109` = `dc,17,ff,ff`), 4 (`0x0914` =
+  `c1,0a,00,00`). Frame length is 14 in every case.
+- **Priority:** AC42 value reports 2, display reads and writes 3. The bridge replies
+  at 3. Whether the priority is significant is unknown.
+
+### 7.2 Operations
+
+A cell is addressed by **scope and key**. The scope is byte 2: a device address selects
+that device's own parameter store, `ff` (with b4 = `01`) a bus-wide store several
+devices take part in. Each op acts on one cell.
+
+| op | sender | acts on the addressed cell by | frames in `ac42-comm` |
+|---|---|---|---|
+| `0x00` read | display → device | asking for its value; the frame carries none (`ff` padding) | 386 (66 to the AC, 320 to the SCX-20) |
+| `0x01` write | display → device, or broadcast | assigning the value it carries | 38 (4 addressed to the AC, 34 broadcast) |
+| `0x02` value report | device → bus | stating its value | 54, all from the AC |
+
+**Only a value report carries an authoritative value, and it is not directed at
+whoever asked.** Byte 2 names the device the value belongs to, so the AC's reports
+carry its own address — all 50 addressed reports in the capture do — never the
+requester's. The op appears in three ways, with nothing in the frame to tell them
+apart:
+
+1. **answer to a read**, same key, 0–55 ms after it;
+2. **acknowledgement of a write**, same key and value, 0–46 ms after it;
+3. **unsolicited**, broadcast, with no request preceding it.
+
+There is no separate acknowledgement op, and no error or refusal op appears anywhere
+in the capture: a request a device does not serve is met with silence. Only the served
+device reports — displays read and write, and never send `0x02`.
+
+- **Read.** Sent in bursts as the wizard's pages open: 66 reads to the AC covering 40
+  distinct keys, 39 of them answered.
+- **An unanswered read is a defined state.** The AC never answered key `0x1A23`, read
+  20 times (4× by each of the five displays); the SCX-20 answered none of the 320
+  reads addressed to it. The wizard renders an unanswered key as NA and proceeds.
+  There is no equivalent precedent for a malformed reply.
+- **Addressed write.** All four in the capture were acknowledged as above: `0x0914` ←
+  `c1,0a,00,00`, then ← `c0,08,00,00`; `0x0109` ← `dd,17`; `0x0209` ← `23,e8`.
+- **Broadcast write** (b2 = `ff`, b4 = `01`). 34 frames: 31 from displays, 3 from the
+  AC. Display 21 stepped key `0x12FF` through `16,00,2c,37,42,4d,58,63`; four
+  displays wrote `0x0208`/`0x0205`/`0x0104`/`0x0204` within 2 s of power-up. A
+  broadcast write is addressed to no single device.
+- **The two scopes are separate cells, not one value seen twice.** The AC's four
+  unsolicited broadcasts, all of key `0x0914` within eight minutes, do not track the
+  writes made to `0x0914` on the AC itself: it broadcast `c0,08,00,00` at 01:55:43
+  while its own cell, read at 01:52:49 and written at 01:54:56, held `c1,0a,00,00`.
+
+### 7.3 Key encoding
+
+- The key is the LE16 at b6/b7, and that number is what canboat's `Key` field carries
+  (`0x0A18` = 2584).
+- 130845's key is a canboat `DYNAMIC_FIELD_KEY`: for keys the dictionary names,
+  canboatjs renders the name in place of the number — `0x2D04` → `"True wind shift"`,
+  `0x0A18` → `2584`. Which keys are named depends on the installed canboat version,
+  not on the bus. **A table keyed by number must resolve the key from the raw frame.**
+  The same applies to the op byte, which no parsed field carries dependably. `code`
+- Field *names* are version-dependent too: camelCase with `useCamel` on (the default
+  this plugin's parser gets), Title Case with it off, and 2.x produced Title Case
+  only. Accepting one spelling meant no read was answered at all on a 3.x host, with
+  the wizard held on *commissioning required* while every other value on the page was
+  live. `code`
+
+Keys the captured AC42 answered (39):
+
+```
+0109 0114 011c 0209 0218 021c 0614 0618 081c 0914 0918 091c 0a18
+0b18 0b20 0b22 0b23 0c18 0c1b 0d19 0d1a 0d23 0e19 0e1a 0f19 0f1a
+1019 101a 1119 111a 111c 1921 1a1e 1a1f 1a22 1b1f 1b20 1d14 2d04
+```
+
+### 7.4 Boat type — key `0x0A18`
+
+Commissioning values are not consumed by anything that steers here; the backing pilot
+carries its own commissioning. Key `0x0A18` (2584) is the exception: it selects the
+control set the MFD's autopilot sidebar offers.
+
+| value | boat type | sidebar controls |
+|---|---|---|
+| `0` | Sail | Tack/Gybe (§2.4) and the wind modes |
+| `1` | Outboard | turn patterns: U-Turn, C-Turn, Spiral, Zigzag, Square, S-Turns, Depth |
+| `2` | Displacement | as `1` |
+| `3` | Planing | as `1` |
+
+- The two control sets occupy the same slot. No value yields both.
+- The value is the index into the wizard's own list, in the order above.
+- The captured AC42 answers `00` = Sail. `ac42-comm`
+- The wizard writes the key like any other. Dockside 2026-08-12, setting the boat type
+  against the emulated AC: `41 9f 23 ff ff ff 18 0a 00 01 03`.
+- The MFD manual states that the wind and tack functions require a Sail boat type —
+  the same constraint stated from the UI side.
+- Consequence for an emulator: a fixed row taken from the capture reports Sail
+  whatever the user selects, leaving the turn patterns unreachable; a fixed powerboat
+  value removes the Tack button.
+
+### 7.5 Autopilot tuning keys
+
+The plotter writes the pilot's steering parameters over the same store, from
+`Settings → Autopilot → Automatic steering…` and `Settings → Autopilot → Sailing…`.
+The keys below were pinned by setting parameters on a Vulcan 9 and reading the write
+off the bus, then cross-checking against the value reported for what the screen had
+shown beforehand. Rows with no `set → sent` entry are the ones the rig could only
+read back. `vulcan9-set`
+
+**The key splits into two bytes: b6 is the group, b7 the parameter within it.** Both
+hold across the set — `0x0D19` and `0x0D1A` are one parameter in two bands, and boat
+type `0x0A18` is parameter `0x0A` of the common group.
+
+| group (b6) | section |
+|---|---|
+| `0x18` | common to both bands |
+| `0x19` | Low |
+| `0x1A` | High |
+| `0x1C` | sailing |
+
+**High and Low name the gain set, not the boat speed.** `Automatic steering…`
+describes High as *"For low speed and when running with a sailboat"* and Low as
+*"For high speed and when beating or reaching with a sailboat"*. Transition speed
+(`0x0C18`) is the crossover point.
+
+Every band value in the AC42 capture matches the Vulcan 9 display before any edit:
+
+| | rudder | counter rudder | auto trim | rate limit |
+|---|---|---|---|---|
+| **High** — screen | 0.55 | 0.50 | 40 | 7.0 |
+| `0x1A` — capture | 55 | 50 | 400 | 3908552 |
+| **Low** — screen | 0.62 | 0.50 | 40 | 6.0 |
+| `0x19` — capture | 62 | 50 | 400 | 3350187 |
+
+The High set applies at low speed, so its 7.0 °/s rate limit against Low's 6.0 °/s
+is consistent with the assignment. `ac42-comm` `vulcan9-set`
+
+| parameter | key | group·param | width | wire encoding | set → sent | shown → reported |
+|---|---|---|---|---|---|---|
+| Transition speed | `0x0C18` | 18·0C | u16 | 0.01 m/s | 0 kn → 0 | 6 kn → 308 |
+| Rudder gain, High | `0x0D1A` | 1A·0D | u16 | value × 100 | 4.00 → 400 | 0.55 → 55 |
+| Auto trim, High | `0x0E1A` | 1A·0E | u16 | seconds × 10 | 4 s → 40 | 40 s → 400 |
+| Counter rudder, High | `0x0F1A` | 1A·0F | u16 | seconds × 100 | 8.0 → 800 | 0.50 → 50 |
+| Rate limit, High | `0x101A` | 1A·10 | u32 | 3.125e-8 rad/s | 15.0 °/s → 8377581 | 7.0 °/s → 3908552 |
+| Rudder gain, Low | `0x0D19` | 19·0D | u16 | value × 100 | 4.00 → 400 | 0.62 → 62 |
+| Auto trim, Low | `0x0E19` | 19·0E | u16 | seconds × 10 | — | 40 s → 400 |
+| Counter rudder, Low | `0x0F19` | 19·0F | u16 | seconds × 100 | — | 0.50 → 50 |
+| Rate limit, Low | `0x1019` | 19·10 | u32 | 3.125e-8 rad/s | 12.0 °/s → 6702065 | 6.0 °/s → 3350187 |
+| Tack time | `0x081C` | 1C·08 | u16 | seconds × 10 | — | 12 s → 120 |
+| Tack angle | `0x0B18` | 18·0B | u16 | 65536 = 360° | 60° → 10923, 150° → 27307 | 100° → 18205 |
+| Wind function | `0x091C` | 1C·09 | u16 | enum | Apparent → 1, True → 2 | Auto → 4 |
+
+- **The scales are not uniform, and nothing on the wire declares which applies.**
+  Dimensionless values and short times are decimal shifts (rudder gain and counter
+  rudder × 100, auto trim and tack time × 10). Speed is SI rather than the displayed
+  unit: 6 kn = 3.0867 m/s → 308. Rate limit is an NMEA 2000 rate field at the
+  3.125e-8 rad/s resolution 127251 uses — 8377581 × 3.125e-8 = 0.2617994 rad/s =
+  15.00000 °/s against 15.0 typed, and the AC's 3908552 = 6.99823 °/s against 7.0
+  displayed.
+- **Angles are a 16-bit binary angle**, `65536 = 360°`, not 1e-4 rad. Tack angle set
+  to 60° sent 10923 and set to 150° sent 27307; a binary angle gives 10922.67 and
+  27306.67, 1e-4 rad gives 10472 and 26180. The AC42's stored 18205 is 100.003° as a
+  binary angle and 104.3° at 1e-4 rad, against 100° displayed. `vulcan9-set`
+- **Width is a property of the parameter.** Rate limit is 32-bit, everything else here
+  16-bit. A fixed-width reader gets rate limit wrong by orders of magnitude.
+- **Both bands are written, not inferred.** Rudder gain in each, rate limit in Low
+  (12.0 °/s → 6702065) as well as High. The remaining Low keys are pinned by readback
+  against the display. `vulcan9-set`
+- **The sailing dialog spans two groups.** Tack time and wind function are `0x1C`;
+  tack angle is `0x0B18`, parameter `0x0B` of the common group, beside boat type.
+  Keys were attributed by single-field edits: tack angle 100 → 150 → 60 moved
+  `0x0B18` only, wind function Auto → Apparent → True moved `0x091C` only, 4 → 1 → 2.
+  Tack time is the remaining key, and its 120 against 12 sec displayed is the same
+  seconds × 10 as auto trim; its field is a spinner this rig could not drive, so that
+  row is by elimination. `vulcan9-set`
+- **Rate limit is converted in 32-bit float — expect ±1 count.** 15.0, 12.0 and
+  6.0 °/s sent 8377581, 6702065 and 3351032; exact arithmetic at 3.125e-8 rad/s gives
+  8377580.4, 6702064.3 and 3351032.2, so the wire value is neither a round nor a ceil
+  of it. All three match `round(float32(deg × π/180) / 3.125e-8)`.
+- **A displayed value does not identify a stored one.** 6.0 °/s written is 3351032;
+  the AC42 stored 3350187 = 5.99849 °/s. Both display as 6.0. Compare rate limits
+  with a tolerance, and do not expect a value read back and rewritten to be
+  byte-identical. `vulcan9-set`
+
+When the plotter writes: `vulcan9-set`
+
+- **One key per keypad, on OK**, 1–2 ms after the tap. Each parameter on
+  `Automatic steering…` has its own keypad.
+- **A whole dialog, on Save.** `Sailing…` carries several fields and sends them
+  together.
+- **Settings pages read nothing.** Opening `Automatic steering…` or `Sailing…` produced
+  no 130845 at all — the plotter displays values it already holds. The op-00 read
+  belongs to the commissioning wizard (§7.2), not to the settings pages.
+- **The value report is what the page then shows**, measured both ways on this rig.
+  Against the canned table the reply carries the old value and the plotter reverts the
+  field just written — which is how the "shown → reported" column above was read, every
+  row taken before any edit. Against an emulator that applies op-01 before answering,
+  the same edits persist across reopening the dialog. §7.6 rule 5.
+
+### 7.6 Requirements for a write path
+
+Derived from §7.1–7.2. An implementation that accepts 130845 writes:
+
+1. **Records only frames whose byte 2 is its own address.** Broadcast writes and
+   writes to other devices are ordinary bus traffic (§7.2), not its own.
+2. **Takes the operation from the wire and applies op-01 only.** A read carries `ff`
+   value bytes; applying one overwrites the value being read.
+3. **Ignores a write carrying no value bytes.** Storing the padding yields an all-`ff`
+   row — for `0x0A18`, a boat type of 255.
+4. **Emits 14-byte frames only.** A stored malformed row is served to every later read
+   of that key; an unanswered read is a defined state (§7.2), a short frame is not.
+5. **Answers a write with the value just written**, from its own address (§7.2). That
+   report is the only acknowledgement the wizard gets.
+6. **Persists what it accepts, or reverts visibly.** A real AC holds commissioning in
+   non-volatile memory, and the wizard reads values back rather than re-writing them,
+   so an in-memory table reports the captured values again after a restart.
+
+Implementation: `lib/ac-emulator.js` — `COMMISSION_RAW` (the 39 keys above plus six
+fallbacks the captured AC never answered) and `reply130845`, which serves reads.
+Applying writes, and lifting the boat type out of the byte table into a plugin
+setting, is issue #12.
+
+---
+
+## 8. Cross-references
 
 - **Kees / canboat n2k_research** (github.com/canboat/n2k_research): raw-PGN RE,
   `navico/ac42/` commissioning analysis + generic `fake-ac.js`, and
