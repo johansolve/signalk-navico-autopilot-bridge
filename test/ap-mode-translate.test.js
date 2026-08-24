@@ -222,7 +222,25 @@ test('a mode the provider cannot do rolls the display back instead of steering',
   let refused = null
   ac.commandV2Mode('wind', (why) => { refused = why })
   assert.strictEqual(refused, 'no wind mode')
-  assert.match(ac.state.lastV2Result, /NOT SENT/)
+  assert.match(ac.state.lastV2Result, /NOT SENT: provider does not offer a wind mode/)
+})
+
+test('an empty mode list is worded as not-yet, not as never', () => {
+  // pypilot-autopilot-provider 1.1.3 ships `modes: []` and fills it from pypilot's
+  // `ap.mode.choices` after the socket connects. States are already declared, so the historical
+  // single-PUT fallback does not apply and the key is refused -- correctly -- but the user must be
+  // able to tell "wait" from "this pilot cannot". Same refusal, different sentence.
+  const ac = emulator({ states: PYPILOT.states, modes: [] })
+  ac.sk.request = () => { throw new Error('nothing may be sent') }
+  let refused = null
+  ac.commandV2Mode('auto', (why) => { refused = why })
+  assert.strictEqual(refused, 'no auto mode')
+  assert.match(ac.state.lastV2Result, /NOT SENT: provider has reported no modes yet/)
+  // And the one-element fallback the provider uses until the choices land is the ordinary case.
+  const partial = emulator({ states: PYPILOT.states, modes: ['compass'] })
+  partial.sk.request = () => { throw new Error('nothing may be sent') }
+  partial.commandV2Mode('route', () => {})
+  assert.match(partial.state.lastV2Result, /does not offer a route mode \(states .* modes compass\)/)
 })
 
 test('garmin: a wind hold reported as state auto reads as wind through the emulator too', () => {
