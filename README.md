@@ -376,14 +376,45 @@ canboat's mislabeled `Event` field. Keys verified live against the MFD:
 
 | key (byte 6) | command | maps to |
 |---|---|---|
-| `0x06` | Standby | `PUT state {standby}` |
-| `0x09` | Auto | `PUT state {auto}` |
-| `0x0f` | Wind | `PUT state {wind}` |
-| `0x0a` | Nav / Track | `PUT state {route}` (two-press engage, see [Nav engage & confirm](#nav-engage--confirm)) |
+| `0x06` | Standby | standby (see [Provider vocabulary](#provider-vocabulary)) |
+| `0x09` | Auto | auto |
+| `0x0f` | Wind | wind (apparent) |
+| `0x0a` | Nav / Track | route (two-press engage, see [Nav engage & confirm](#nav-engage--confirm)) |
 | `0x1a` | ChangeCourse | `PUT target/adjust` (±1° / ±10°) |
 | `0x11` | Tack / Gybe | `POST tack/{port\|starboard}` (wind mode only) |
-| `0x0c` | No Drift | `PUT state {auto}` (see [Known limitations](#known-limitations)) |
+| `0x0c` | No Drift | auto (see [Known limitations](#known-limitations)) |
 | `0x1c` | key-press envelope | ignored (precedes every command) |
+
+#### Provider vocabulary
+
+The four mode keys are **not** V2 state names, and the plugin does not send them as such.
+The V2 spec fixes no vocabulary: a provider declares its own state names in
+`options.states`, each with an `engaged` flag, and declares the steering *reference*
+separately in `options.modes`. A mode key is therefore a request for a **(state, mode)
+pair**, and how many writes that takes depends on the provider. The plugin reads the
+`options` off the same poll it reads the state from and translates both ways
+([`lib/ap-mode-translate.js`](lib/ap-mode-translate.js)):
+
+| provider | declares | Auto sends | Standby sends |
+|---|---|---|---|
+| `@signalk/signalk-autopilot` | states `standby`/`auto`/`wind`/`route`, `modes: []` | `PUT state {auto}` | `PUT state {standby}` |
+| `pypilot-autopilot-provider` | states `enabled`/`disabled`, modes `compass`/`gps`/`nav`/`wind`/`true wind` | `PUT mode {compass}` + `PUT state {enabled}` | `PUT state {disabled}` |
+| `signalk-autopilot-provider-garmin` | states `auto`/`standby`, modes `compass`/`wind`/`route` | `PUT mode {compass}` + `PUT state {auto}` | `PUT state {standby}` |
+
+The mode is written **before** the engage, so a pilot is never engaged on whatever
+reference it was last left in — and it is written even when a state of the same name
+exists, because the Garmin provider's `auto` state means *engaged in the current mode*.
+A key the provider declares no mode for is refused and named on the status page, rather
+than sent as something else. Reading back works the same way, with the mode outranking the
+state wherever a provider declares one: Garmin reports state `auto` while holding a wind
+angle in mode `wind`, and pypilot's `gps` is a COG hold (the AC's No Drift), so it reads as
+auto and never as route.
+
+Sending the AC's names as states unconditionally is what made **every** button fail with
+HTTP 500 `Invalid state supplied!` on a pypilot rig — visible on the plotter as a pilot
+that engaged for a second and then dropped back, since the display is optimistic and the
+rollback waits on the HTTP round trip. Dry-run showed nothing, because dry-run sends
+nothing.
 
 **ChangeCourse** (`0x1a`): byte 8 = direction (`0x03` starboard/+, `0x02`
 port/−), bytes 9–10 = magnitude LE16 at `0.0001 rad/bit` (10° = 1745, 1° = 174).
@@ -601,7 +632,15 @@ This is a beta; these are open:
   `SeatalkPilotMode16` `0x0181` ("No Drift, COG referenced") is decoded to `route` by
   `@signalk/n2k-signalk`, and `signalk-autopilot` already uses that same `0x0181` as its
   waypoint advance. So the button engages auto: the pilot holds a heading, it just does
-  not compensate for drift.
+  not compensate for drift. A provider that *does* offer the mode under its own name —
+  pypilot calls it `gps` — is not asked for it either: the key maps to the AC mode `auto`
+  before any provider vocabulary is involved, and that mapping is the same for everyone.
+- **A pilot put into *true* wind elsewhere shows its target as an apparent angle.** The AC
+  has one wind key and the MFD one wind field, both apparent-referenced, so a provider
+  offering both (pypilot: `wind` and `true wind`) is always *asked* for apparent. But a pilot
+  put into true wind from its own head or web UI still reads back as wind mode — correctly,
+  it is steering to the wind — and its target then reaches the MFD labelled apparent, off by
+  the difference between the two angles. Display only; the next Wind press sets apparent.
 - **Not every condition or pilot is covered.** Auto, ±course, Wind and the abort path
   are proven on the water across several outings in varied conditions, Tack/Gybe on one
   (2026-07-11), and Nav/Track engage plus multi-leg route sailing with waypoint advance

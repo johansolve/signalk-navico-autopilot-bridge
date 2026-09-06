@@ -110,6 +110,13 @@ function render (d) {
   const evState = d.evPilotState
   const pending = evState === 'route-pending' || d.navPending
   const engaged = evState === 'route-engaged'
+  // The pilot's state in the AC's own four modes. skState is the PROVIDER's name for it, which
+  // is only the same thing on a provider that happens to use those names: pypilot's says
+  // `enabled`/`disabled`, so a `!== 'standby'` test read a disengaged pilot as steering and
+  // painted the pill green. Anything deciding what the pilot is DOING reads this; the raw name
+  // is kept beside it as the thing to check the translation against.
+  const skAc = d.skStale ? null : (d.skAcMode || d.skState)
+  const skRaw = d.skStale ? null : (d.skState ? d.skState + (d.skMode ? ' · ' + d.skMode : '') : null)
 
   // resolved device names (from the server's N2K source registry), empty = hidden
   setIdent('mfd-id', d.mfdName, d.mfdPresence)
@@ -133,7 +140,7 @@ function render (d) {
 
   // pilot node
   cls($('n-pilot'), 'node', (EV_ST[evState] || '') + (pending ? ' beat' : ''))
-  $('b-pilot').textContent = 'pilot: ' + (evState ? EV_LABEL[evState] || evState : (d.skState || 'unknown'))
+  $('b-pilot').textContent = 'pilot: ' + (evState ? EV_LABEL[evState] || evState : (skAc || 'unknown'))
   $('b-pilot').style.color = tone(engaged ? 'ok' : pending ? 'warn' : (evState === 'auto' || evState === 'wind') ? 'accent' : 'mut')
 
   // MFD + wires
@@ -155,7 +162,7 @@ function render (d) {
   else {
     // Live and able to steer: show the pilot's actual mode. Green = the pilot is
     // steering (auto/wind/track), amber = confirm pending, neutral = standby.
-    const st = evState || (d.skStale ? null : d.skState)
+    const st = evState || skAc
     if (!st) { cls(pill, 'pill', ''); pill.textContent = 'ready' }
     else { pill.textContent = EV_LABEL[st] || st; cls(pill, 'pill', engaged ? 'ok' : pending ? 'warn' : st === 'standby' ? '' : 'ok') }
   }
@@ -175,7 +182,13 @@ function render (d) {
   // stats
   setV('s-bridge', d.bridge, d.bridge === 'live' ? 'ok' : d.bridge === 'dry-run' ? 'warn' : '')
   setV('s-steer', canSteer ? 'yes' : 'no', canSteer ? 'ok' : 'warn')
-  setV('s-pilot', evState ? EV_LABEL[evState] || evState : (d.skStale ? 'stale' : d.skState || '—'), engaged ? 'ok' : pending ? 'warn' : '')
+  // Show the provider's own words after the AC mode when they differ (`auto · enabled · compass`):
+  // on a provider that does not use the AC's names, the translation is what a wrong mode on the
+  // MFD comes down to, and it cannot be checked from the AC mode alone.
+  setV('s-pilot', evState
+    ? EV_LABEL[evState] || evState
+    : (d.skStale ? 'stale' : (skAc ? (skAc === skRaw ? skAc : skAc + ' · ' + skRaw) : '—')),
+  engaged ? 'ok' : pending ? 'warn' : '')
   setV('s-pending', d.navPending ? 'pending — confirm on MFD' : 'idle', d.navPending ? 'warn' : '')
   setV('s-cmds', d.cmdCount == null ? '—' : String(d.cmdCount))
   setV('s-last', d.lastEvent || '—')
