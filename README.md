@@ -628,11 +628,11 @@ This is a beta; these are open:
 
 - **No Drift maps to plain auto.** Raymarine's No Drift is a COG-referenced heading
   hold — where Auto holds a compass heading and lets leeway and current push the boat
-  off the ground track — but nothing in the SignalK chain can ask for it:
-  `SeatalkPilotMode16` `0x0181` ("No Drift, COG referenced") is decoded to `route` by
-  `@signalk/n2k-signalk`, and `signalk-autopilot` already uses that same `0x0181` as its
-  waypoint advance. So the button engages auto: the pilot holds a heading, it just does
-  not compensate for drift. A provider that *does* offer the mode under its own name —
+  off the ground track — but the EV-200 has no such mode to ask for.
+  `SeatalkPilotMode16` carries its modes on distinct high bits, and `0x0181` is
+  `Track | 1`, the Track-engaged sub-mode — which is why `signalk-autopilot` sends it
+  as its waypoint advance. So the button engages auto: the pilot holds a heading, it just
+  does not compensate for drift. A provider that *does* offer the mode under its own name —
   pypilot calls it `gps` — is not asked for it either: the key maps to the AC mode `auto`
   before any provider vocabulary is involved, and that mapping is the same for everyone.
 - **A pilot put into *true* wind elsewhere shows its target as an apparent angle.** The AC

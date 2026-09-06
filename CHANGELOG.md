@@ -37,7 +37,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   alongside the state, and where a provider declares one the mode decides.
 
 ### Documentation
-- **§2.2 — why No Drift maps to auto.** The EV-200 has no COG-referenced hold:
+- **§2.2 and the README's known limitation — why No Drift maps to auto.** The EV-200 has no COG-referenced hold:
   `SeatalkPilotMode16` carries four modes on distinct high bits, and the `0x0181`
   `signalk-autopilot` sends as its waypoint advance is `Track | 1`, the Track-engaged
   sub-mode §5 already records. Whether the plotter can show a No Drift label of its own is
