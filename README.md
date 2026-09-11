@@ -2,11 +2,12 @@
 
 `signalk-navico-autopilot-bridge` · a Simrad AC12/AC42 emulator
 
-> **Status: 0.9.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
+> **Status: 0.10.0-beta — feature complete.** Sea-trialled on a real rig (B&G Vulcan 7
 > → SignalK V2 → Raymarine EV-200) across **several outings in varied conditions**:
 > engaging and holding Auto, ±course nudges, holding Wind, and the abort / failsafe path
 > all worked on the water. **Tack and Gybe were sea-trialled on 2026-07-11 and performed
-> exemplarily**. Nav/Track engage from the MFD's own confirm dialog — driving the pilot
+> exemplarily**, and on 2026-08-25 the tack direction was validated on both tacks.
+> Nav/Track engage from the MFD's own confirm dialog — driving the pilot
 > into Track without a separate control-head press — is **proven dockside (2026-07-05) and
 > confirmed under way**. **Multi-leg route sailing including waypoint advance was
 > sea-trialled 2026-07-15 and again on 2026-08-03 and 2026-08-04**, with optional
@@ -15,21 +16,24 @@
 > [Requirements](#requirements), [Known limitations](#known-limitations) and the
 > [Disclaimer](#disclaimer--no-warranty) before using it.
 
-**New in 0.9.0-beta — the plugin now works on servers that are not configured like the one
-it was written on.** An **SSL-enabled server** was never reached at all, because the
-loopback calls were pinned to plain http on port 3000. A server with **security disabled**
-left the bridge waiting forever for a token that cannot be issued. A **CAN interface that
-never opened** showed a green status frozen on "Starting…" instead of an error. A provider
-**without the `advanceWaypoint` action** failed silently. Also: a boat with only true
-heading now gets heading frames, derived properly rather than mislabelled, and device names
-resolve on servers bundling canboatjs 2.x. The SSL, security-disabled and missing-CAN cases
-were checked against real SignalK 2.30.0 servers, none of which the development boat is
-configured as; no MFD was involved, since a container has no CAN bus. See the
-[changelog](CHANGELOG.md).
+**New in 0.10.0-beta — the plugin now speaks the pilot provider's own vocabulary.** Every
+button failed with HTTP 500 `Invalid state supplied!` against a **pypilot** rig, because
+the bridge sent the AC's four mode names as V2 **states** — `@signalk/signalk-autopilot`'s
+vocabulary and nobody else's. The spec fixes no state names: a provider declares its own,
+and puts the steering reference in `options.modes`. A mode key is therefore a **(state,
+mode) pair**, translated both ways per provider, and the mode is written *before* the
+engage so a pilot is never engaged on whatever reference it was last left in. Two more
+V2-only faults went with it: a pilot showed **"Set Heading - - -"** on the plotter while
+engaged, because the bridge only ever read the V1 setpoint paths; and a provider holding a
+**wind angle** had it sent to the MFD as a course to steer, because what the single V2
+target means was decided from the pilot's state rather than its mode. Thanks to
+[@drott](https://github.com/drott) for the provider vocabulary and for finding the V2
+target read. See the [changelog](CHANGELOG.md).
 
-**0.8.5-beta before it** fixed the address claim, which on any host resolving canboatjs
-3.19 or newer made an MFD list the emulated AC and never accept it as a pilot. If you are
-coming from anything older, read that entry too.
+**0.9.0-beta before it** made the plugin work on servers that are not configured like the
+one it was written on: an SSL-enabled server, a server with security disabled, a CAN
+interface that never opened, and a provider without the `advanceWaypoint` action. If you
+are coming from anything older, read that entry too.
 
 Emulate a **Simrad AC12/AC42 autopilot computer** so a **Navico MFD** (B&G
 Vulcan/Zeus, Simrad, Lowrance) binds to it and exposes its own **autopilot
