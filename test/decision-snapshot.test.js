@@ -46,9 +46,9 @@ test('the snapshot keeps the turn the decision was taken on, after it is consume
 
 test('every refusal records its own reason, not the previous decision', () => {
   const cases = [
-    { setup: (ac) => measured(ac, 4, 'advance', { ageMs: 9000 }), re: /not sizeable/ },
+    { setup: (ac) => measured(ac, 4, 'advance', { ageMs: 9000 }), re: /leg change \d+s stale/ },
     { setup: (ac) => measured(ac, 40, 'advance'), re: /Advance 40deg > 25deg/ },
-    { setup: (ac) => measured(ac, null, null), re: /not sizeable/ }
+    { setup: (ac) => measured(ac, null, null), re: /no leg change to measure/ }
   ]
   for (const c of cases) {
     const ac = emulator()
@@ -112,7 +112,7 @@ test('the age fields describe this decision, and count in the right direction', 
   assert.equal(d.oldHeldMs, 31000)
   assert.ok(d.legHeldMs >= 47000 && d.legHeldMs < 48000, `legHeldMs ${d.legHeldMs} should be ~47000`)
   assert.ok(Date.parse(d.at) >= before && Date.parse(d.at) <= Date.now(), 'at is this decision')
-  assert.match(d.outcome, /not sizeable/, 'and 9 s old is indeed too stale to act on')
+  assert.match(d.outcome, /leg change \d+s stale/, 'and 9 s old is indeed too stale to act on')
 })
 
 test('the three refusal branches the other tests never reach', () => {
@@ -153,6 +153,6 @@ test('the snapshot is taken AFTER the sampler runs, not before', () => {
   ac.maybeAutoAdvance()
   const d = ac.statusJson().lastDecision
   assert.equal(d.turnDeg, null, 'the sampler cleared it before the decision saw it')
-  assert.match(d.outcome, /not sizeable/)
+  assert.match(d.outcome, /no leg change to measure/)
   assert.deepEqual(ac.sent, [], 'and nothing was sent on a measurement that no longer existed')
 })

@@ -36,6 +36,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   providers this whole path exists for are free not to. `getState()` now returns the mode
   alongside the state, and where a provider declares one the mode decides.
 
+### Changed
+- **A refused auto-advance now says which of the two things went wrong.** `turn not sizeable`
+  covered both "no leg change to measure" and "the leg change is too old to belong to this
+  pending", and read as though the turn had been measured and found small — the one thing it
+  never means, since a small turn is auto-advanced. The stale case now carries the age. Log
+  text only; the gate is unchanged.
+
 ### Documentation
 - **§2.2 and the README's known limitation — why No Drift maps to auto.** The EV-200 has no COG-referenced hold:
   `SeatalkPilotMode16` carries four modes on distinct high bits, and the `0x0181`

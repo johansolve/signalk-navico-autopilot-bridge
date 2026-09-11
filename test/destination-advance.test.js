@@ -208,14 +208,17 @@ test('but a re-origin off a leg that never settled is still refused', () => {
   assert.deepEqual(ac.sent, [])
 })
 
-test('a stale leg change still cannot answer a pending', () => {
+test('a leg change the sampler has dropped cannot answer a pending', () => {
   const ac = emulator()
   legThen(ac, 150, WP1, 150, WP2)
   ac.sampleTrackBrg()
   ac.lastTurnAt = Date.now() - 9000
-  ac.app.getSelfPath = () => null          // nothing new to sample at the pending moment
+  // An empty model at the pending moment ages the leg out, so the measurement is gone rather
+  // than merely old -- the no-measurement branch. The stale branch proper is in
+  // decision-snapshot.test.js, which injects the measurement and leaves it in place.
+  ac.app.getSelfPath = () => null
   ac.maybeAutoAdvance()
-  assert.match(ac.statusJson().lastDecision.outcome, /not sizeable/)
+  assert.match(ac.statusJson().lastDecision.outcome, /no leg change to measure/)
   assert.deepEqual(ac.sent, [])
 })
 
