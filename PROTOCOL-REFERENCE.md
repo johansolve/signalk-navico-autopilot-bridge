@@ -635,7 +635,40 @@ setting, is issue #12.
 
 ---
 
-## 8. Cross-references
+## 8. CAN transport — why the bridge drives `Canbus` directly
+
+canboatjs offers three ways for a plugin to put a device on the bus. The bridge
+uses the oldest one on purpose. `code`
+
+| API | since | what it gives | why not here |
+|---|---|---|---|
+| `new Canbus()` + `FromPgn` | 2.x | own socketcan channel, own `CanDevice`, raw frames **and** parsed PGNs | **in use** |
+| `SimpleCan` | **3.18.0** (PR #424, 2026-05-05) | same, minus the stream plumbing | version floor; buys almost nothing |
+| `CanboatUtilities.createEmulator` | **3.18.0** | a device on the server's *existing* CAN connection | parsed PGNs only, no raw frames |
+
+`SimpleCan` is exported from `lib/index.ts` only from 3.18.0; 3.16.4 and earlier
+do not expose it at all. The plugin's peer floor is `@canboat/canboatjs >=2.10.0`
+and installs do resolve 2.x out of `~/.signalk`, so adopting it means dropping
+those hosts or carrying two transports.
+
+What it would remove: the `pipe()`/`plainText` trap (`stream.fromPgn`, see
+`lib/canboat-compat.js`) and a few lines of stream wiring. What it would **not**
+remove: parsing with `FromPgn` (fast-packet reassembly stays caller-side), the
+address-claim shape probe, the `Software Version Code` pin — it builds the same
+`CanDevice` — feeding `N2KAnalyzerOut` back for ISO answers, and actisense-string
+sending. It also opens its own `CanChannel` exactly like `Canbus`, so there is no
+resource win, and it drops `setProviderStatus`/`setProviderError`, which the
+plugin's CAN-error status hangs on.
+
+`createEmulator` (reached via the `canboatjsUtils` propertyValue) is the
+architecturally right shape — no second channel, no duplicate claim stack — but
+it hands out **parsed** PGNs only. The 130850 button decode reads the raw frame
+bytes for group/key, because canboat's field naming is not stable across majors
+(§2.1). A raw-frame callback on `DeviceEmulator` would make it viable.
+
+---
+
+## 9. Cross-references
 
 - **Kees / canboat n2k_research** (github.com/canboat/n2k_research): raw-PGN RE,
   `navico/ac42/` commissioning analysis + generic `fake-ac.js`, and
