@@ -266,3 +266,101 @@ test('canonical 65305 standby does not override a fresh 126720 auto', () => {
   assert.strictEqual(ac.commandedMode, 'auto')
   assert.strictEqual(ac.currentMode(), 'auto')
 })
+
+test('auto 65305 announces 00,1d then keeps 00,0a status', () => {
+  const ac = new ACEmulator(quietApp(), { bridge: 'live', acModel: 'AC12' })
+  ac.bootDone = true
+  ac.commandedMode = 'auto'
+  ac.state.skApState = 'auto'
+  ac.state.lastSkStateMs = Date.now()
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push(bytes)
+  ac.send65305()
+  assert.ok(sent.includes('41,9f,00,1d,81,00,00,00'))
+  assert.ok(sent.includes('41,9f,00,1d,80,00,00,00'))
+  assert.ok(sent.includes('41,9f,00,0a,16,00,00,00'))
+  sent.length = 0
+  ac.send65305()
+  assert.ok(!sent.some((b) => b.startsWith('41,9f,00,1d')))
+  assert.ok(sent.includes('41,9f,00,0a,16,00,00,00'))
+})
+
+test('AC12 firehose1Hz emits 65340 auto', () => {
+  const ac = new ACEmulator(quietApp(), { bridge: 'live', acModel: 'AC12', enableFirehose: true })
+  ac.bootDone = true
+  ac.commandedMode = 'auto'
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.firehose1Hz()
+  assert.ok(sent.some((s) => s.pgn === 65340 && s.bytes === '41,9f,10,01,fe,fa,00,80'))
+})
+
+test('AC 127250 is sent with enableStdPgns off, like emulate.js', () => {
+  const heading = 5.3254
+  const ac = new ACEmulator(quietApp((p) => (
+    p === 'navigation.headingMagnetic.value' ? heading : undefined
+  )), { acModel: 'AC12', enableStdPgns: false })
+  ac.bootDone = true
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ prio, pgn, bytes })
+  ac.send127250()
+  assert.strictEqual(sent.length, 1)
+  assert.strictEqual(sent[0].pgn, 127250)
+  assert.strictEqual(sent[0].prio, 3)
+  assert.strictEqual(sent[0].bytes, `00,${ac.rad16(heading)},ff,7f,ff,7f,fd`)
+})
+
+test('65341 field 0x0b is 00,00 (computer present)', () => {
+  const ac = new ACEmulator(quietApp(), { acModel: 'AC12', enableFirehose: true })
+  ac.bootDone = true
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.send65341Extras()
+  const b = sent.find((s) => s.bytes.startsWith('41,9f,ff,ff,0b,'))
+  assert.ok(b)
+  assert.strictEqual(b.bytes, '41,9f,ff,ff,0b,ff,00,00')
+})
+
+test('mode firehose does not wait for 126720', () => {
+  const ac = new ACEmulator(quietApp(), { bridge: 'live', acModel: 'AC12', enableFirehose: true })
+  ac.bootDone = true
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.firehose2Hz()
+  assert.ok(sent.some((s) => s.pgn === 65305))
+})
+
+test('replayModeEdge paints standby then auto without commanding the S1', async () => {
+  const ac = new ACEmulator(quietApp(), { bridge: 'live', acModel: 'AC12', enableFirehose: true })
+  ac.bootDone = true
+  ac.commandedMode = 'auto'
+  ac.state.skApState = 'auto'
+  ac.state.lastSkStateMs = Date.now()
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.replayModeEdge()
+  assert.strictEqual(ac.commandedMode, 'auto')
+  assert.ok(sent.some((s) => s.pgn === 65305 && s.bytes === '41,9f,00,0a,0a,00,00,00'))
+  assert.ok(sent.some((s) => s.pgn === 65340 && s.bytes === '41,9f,00,00,fe,f8,00,80'))
+  await new Promise((r) => setTimeout(r, 600))
+  assert.strictEqual(ac.commandedMode, 'auto')
+  assert.ok(sent.some((s) => s.bytes === '41,9f,00,0a,16,00,00,00'))
+  assert.ok(sent.some((s) => s.bytes === '41,9f,00,1d,81,00,00,00'))
+})
+
+test('mode-edge replay arms once, then again when the MFD comes back', () => {
+  const ac = new ACEmulator(quietApp(), { bridge: 'live', acModel: 'AC12', enableFirehose: true })
+  ac.bootDone = true
+  ac.commandedMode = 'auto'
+  ac.armModeEdgeReplay()
+  ac.armModeEdgeReplay()
+  assert.strictEqual(ac.modeEdgeArmed, true)
+  ac.mfdSrcs = [16]
+  ac.seen[16] = Date.now() - 10000
+  ac.lastMfdPresence = 'offline'
+  ac.seen[16] = Date.now()
+  ac.modeEdgeArmed = true
+  ac.watchMfdForModeEdge()
+  assert.strictEqual(ac.modeEdgeArmed, true)
+  assert.strictEqual(ac.lastMfdPresence, 'online')
+})
