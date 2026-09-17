@@ -415,6 +415,118 @@ function stngAutoAc () {
   return ac
 }
 
+test('STNG heading hold Zeus −1 sends Seatalk 05,fa without V2', () => {
+  const ac = stngAutoAc()
+  const tx = []
+  const v2 = []
+  ac.send = (prio, pgn, bytes, dst) => tx.push({ prio, pgn, bytes, dst })
+  ac.applyV2 = (desc) => v2.push(desc)
+  zeusMinus1(ac)
+  assert.strictEqual(tx.length, 1)
+  assert.ok(tx[0].bytes.includes('86,21,05,fa'))
+  assert.strictEqual(tx[0].dst, 115)
+  assert.deepStrictEqual(v2, [])
+})
+
+test('STNG heading hold Zeus +10 sends Seatalk 08,f7', () => {
+  const ac = stngAutoAc()
+  const tx = []
+  ac.send = (prio, pgn, bytes, dst) => tx.push({ prio, pgn, bytes, dst })
+  ac.state.lastApRaw = {
+    src: 16,
+    at: Date.now(),
+    group: 0x0a,
+    key: 0x1a,
+    hex: '41,9f,23,ff,ff,0a,1a,00,03,d1,06,00'
+  }
+  ac.handleIncomingAP({ pgn: 130850, src: 16, dst: 255, fields: {} })
+  assert.strictEqual(tx.length, 1)
+  assert.ok(tx[0].bytes.includes('86,21,08,f7'))
+})
+
+test('STNG heading hold does not invert Zeus −1', () => {
+  const ac = stngAutoAc()
+  ac.windDatumRad = ac.unsignedRad(307 * Math.PI / 180)
+  ac.stngWindLock = true
+  const tx = []
+  ac.send = (prio, pgn, bytes, dst) => tx.push({ prio, pgn, bytes, dst })
+  zeusMinus1(ac)
+  assert.ok(tx[0].bytes.includes('86,21,05,fa'))
+  assert.strictEqual(Math.round(ac.windDatumRad * 180 / Math.PI), 307)
+})
+
+function feed65360 (ac, magRad) {
+  const mag = Math.round(magRad / 0.0001) & 0xffff
+  ac.onRawFrame({
+    pgn: { pgn: 65360, src: 115 },
+    data: Buffer.from([0x3b, 0x9f, 0xff, 0xff, 0xff, mag & 0xff, (mag >> 8) & 0xff, 0xff])
+  })
+}
+
+test('STNG heading 65341 waits for 65360 instead of painting live compass', () => {
+  const compass = 5.0198
+  const ac = new ACEmulator(quietApp((p) => {
+    if (p === 'navigation.headingMagnetic.value') { return compass }
+    return undefined
+  }), { acModel: 'AC12' })
+  ac.pilotKind = 'stng'
+  ac.commandedMode = 'auto'
+  ac.state.skApState = 'auto'
+  ac.state.lastSkStateMs = Date.now()
+  ac.pilotSrc = 115
+  assert.strictEqual(ac.apTargetRad('heading'), null)
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.send65341()
+  assert.strictEqual(sent[0].bytes, '41,9f,ff,ff,02,ff,ff,ff')
+})
+
+test('STNG heading 65360 on CAN is the 65341 lock Zeus reads', () => {
+  const lock = 5.3341
+  const ac = stngAutoAc()
+  feed65360(ac, lock)
+  assert.ok(Math.abs(ac.headingDatumRad - lock) < 1e-4)
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.send65341()
+  assert.strictEqual(sent[0].bytes, `41,9f,ff,ff,02,ff,${ac.rad16(lock)}`)
+})
+
+test('STNG heading hold Zeus −1 nudges the locked heading one degree', () => {
+  const ac = stngAutoAc()
+  feed65360(ac, 180 * Math.PI / 180)
+  const tx = []
+  ac.send = (prio, pgn, bytes, dst) => tx.push({ prio, pgn, bytes, dst })
+  zeusMinus1(ac)
+  assert.strictEqual(Math.round(ac.headingDatumRad * 180 / Math.PI), 179)
+  assert.ok(tx[0].bytes.includes('86,21,05,fa'))
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.send65341()
+  assert.strictEqual(sent[0].bytes, `41,9f,ff,ff,02,ff,${ac.rad16(ac.headingDatumRad)}`)
+})
+
+test('STNG heading ±1 still sends Seatalk when V2 poll says standby', () => {
+  const ac = stngAutoAc()
+  ac.state.skApState = 'standby'
+  const tx = []
+  ac.send = (prio, pgn, bytes, dst) => tx.push({ prio, pgn, bytes, dst })
+  zeusMinus1(ac)
+  assert.strictEqual(tx.length, 1)
+  assert.ok(tx[0].bytes.includes('86,21,05,fa'))
+})
+
+test('STNG stale 65360 does not overwrite a Zeus heading nudge', () => {
+  const ac = stngAutoAc()
+  feed65360(ac, 180 * Math.PI / 180)
+  zeusMinus1(ac)
+  assert.strictEqual(Math.round(ac.headingDatumRad * 180 / Math.PI), 179)
+  feed65360(ac, 180 * Math.PI / 180)
+  assert.strictEqual(Math.round(ac.headingDatumRad * 180 / Math.PI), 179)
+  feed65360(ac, 179 * Math.PI / 180)
+  assert.strictEqual(Math.round(ac.headingDatumRad * 180 / Math.PI), 179)
+  assert.strictEqual(ac.stngHeadingDirty, false)
+})
 test('STNG 0x7f heartbeat does not move an existing lock', () => {
   const ac = stngWindAc()
   feed7f(ac, ac.unsignedRad(80 * Math.PI / 180))
