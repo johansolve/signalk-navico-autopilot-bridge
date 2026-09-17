@@ -116,3 +116,35 @@ test('Seatalk1 V1 state is read from 126720 / src 115, not the 65305 firehose', 
   ac.pilotSrc = 115
   assert.strictEqual(ac.seatalkStateFromSk(), 'auto')
 })
+
+test('AC 127245 matches emulate.js rewrite of converter Position', () => {
+  const ac = new ACEmulator(quietApp(), { acModel: 'AC12', enableStdPgns: false })
+  ac.bootDone = true
+  ac.pilotKind = 'stng'
+  ac.pilotSrc = 115
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ prio, pgn, bytes })
+  ac.onRawFrame({
+    pgn: { pgn: 127245, src: 115 },
+    data: Buffer.from([0xff, 0xf8, 0xff, 0xff, 0x00, 0xf1, 0xff, 0xff])
+  })
+  ac.send127245()
+  assert.strictEqual(sent.length, 1)
+  assert.strictEqual(sent[0].pgn, 127245)
+  assert.strictEqual(sent[0].bytes, 'ff,ff,ff,f1,00,f1,ff,ff')
+})
+
+test('AC 127245 falls back to SK rudder when the converter frame is stale', () => {
+  const rudder = -14 * Math.PI / 180
+  const ac = new ACEmulator(quietApp((p) => (
+    p === 'steering.rudderAngle.value' ? rudder : undefined
+  )), { acModel: 'AC12' })
+  ac.bootDone = true
+  const sent = []
+  ac.send = (prio, pgn, bytes) => sent.push({ pgn, bytes })
+  ac.send127245()
+  assert.strictEqual(sent.length, 1)
+  const pos = ac.srad16(rudder)
+  const hi = pos.split(',')[1]
+  assert.strictEqual(sent[0].bytes, `ff,ff,ff,${hi},${pos},ff,ff`)
+})
