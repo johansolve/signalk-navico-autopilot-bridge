@@ -93,9 +93,10 @@ module.exports = function (app) {
           enableStdPgns: {
             type: 'boolean',
             title: 'Also send standard nav PGNs (advanced, A/B only)',
-            description: 'Emit 127245/127237/127250 as the real AC also does. These ' +
-              'DUPLICATE other bus sources (rudder/heading/track) and can cause ' +
-              'conflicting data — only enable for protocol A/B testing.',
+            description: 'Emit extra 127237/127250 as the real AC also does. These ' +
+              'DUPLICATE heading/track sources and can cause conflicting data — only ' +
+              'enable for protocol A/B testing. 127245 rudder is always sent (Zeus ' +
+              'reads the AC Angle Order, not the converter Position).',
             default: false
           }
         }
