@@ -46,6 +46,7 @@ module.exports = function (app) {
   // not silently reset anyone's settings to the defaults the empty groups would show.
   const GROUPS = {
     n2k: ['canInterface', 'acModel', 'preferredAddress', 'enableFirehose', 'enableStdPgns'],
+    boat: ['boatType'],
     pilot: ['bridge', 'autopilotId', 'skHost', 'skPort', 'token'],
     advance: ['autoAdvanceMaxDeg'],
     restart: ['autoConfirmRestart'],
@@ -97,6 +98,28 @@ module.exports = function (app) {
               'DUPLICATE other bus sources (rudder/heading/track) and can cause ' +
               'conflicting data — only enable for protocol A/B testing.',
             default: false
+          }
+        }
+      },
+      // Second on the page on purpose: it is the one commissioning value that changes what
+      // the plotter shows, so it is the one a user goes looking for.
+      boat: {
+        type: 'object',
+        title: 'Boat',
+        properties: {
+          boatType: {
+            type: 'string',
+            title: 'Boat type',
+            description: 'The boat type the emulated AC reports to the MFD when it reads ' +
+              'the autopilot\'s commissioning. It decides which control the plotter\'s ' +
+              'autopilot sidebar offers: **Sail** gives the wind modes and the Tack ' +
+              'control, and the powerboat types (**Outboard**, **Displacement**, ' +
+              '**Planing**) give the turn patterns instead — U-Turn, C-Turn, Spiral, ' +
+              'Zigzag, Square, S-Turns, Depth. Never both; they share the same slot. ' +
+              'Setting it on the plotter (Autopilot → Installation → Commissioning) ' +
+              'overrides this and is written back here.',
+            enum: ['Sail', 'Outboard', 'Displacement', 'Planing'],
+            default: 'Sail'
           }
         }
       },
@@ -260,6 +283,7 @@ module.exports = function (app) {
   const md = { 'ui:options': { enableMarkdownInDescription: true } }
   plugin.uiSchema = {
     n2k: { acModel: md },
+    boat: { boatType: md },
     pilot: { autopilotId: md }
   }
 
@@ -338,6 +362,24 @@ module.exports = function (app) {
   // tick because savePluginOptions/readPluginOptions are attached to app AFTER this factory runs.
   setImmediate(() => migrateSavedConfig())
 
+  // The plotter's dockside Commissioning wizard can write the boat type into the emulated AC
+  // (130845 op 01), and that write has to win over the configured value -- it is the more
+  // recent of the two and the user is standing in front of it. Store it back into the plugin
+  // config so the settings page shows what the plotter set and the next start agrees with it,
+  // rather than reverting the choice one restart later. savePluginOptions only writes the
+  // config file (no plugin restart), so this cannot restart the emulator that called it.
+  function saveBoatType (name) {
+    try {
+      const saved = (typeof app.readPluginOptions === 'function') ? app.readPluginOptions() : null
+      const flat = flatten(saved && saved.configuration)
+      if (flat.boatType === name) { return }
+      flat.boatType = name
+      app.savePluginOptions(regroup(flat), (err) => {
+        if (err) { app.error('could not store the boat type the MFD wrote: ' + (err.message || err)) } else { app.debug('boat type ' + name + ' stored in the plugin config (written by the MFD)') }
+      })
+    } catch (e) { app.debug('boat type write-back skipped: ' + (e && e.message)) }
+  }
+
   // A SignalK token is a JWT (three dot-separated parts). Ignore anything else
   // pasted into the config field so a stray value can't shadow a valid token.
   function validJwt (t) { return typeof t === 'string' && t.split('.').length === 3 }
@@ -355,7 +397,7 @@ module.exports = function (app) {
       // With security disabled the server has no tokens to issue, so the bridge must steer
       // without one rather than wait forever for an approval nobody can grant (issue #5).
       const openServer = isOpenServer(app)
-      emulator = new ACEmulator(app, Object.assign({}, o, { token, openServer }))
+      emulator = new ACEmulator(app, Object.assign({}, o, { token, openServer, onBoatTypeChange: saveBoatType }))
       emulator.start()
 
       // No token and we intend to steer -> request device access; an admin
